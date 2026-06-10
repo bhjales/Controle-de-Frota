@@ -300,6 +300,7 @@ export class FleetStore {
 
   private constructor() {
     this.loadState();
+    this.loadUsersFromFirestore();
   }
 
   public static getInstance(): FleetStore {
@@ -394,6 +395,17 @@ export class FleetStore {
 
   private triggerListeners() {
     this.listeners.forEach(listener => listener());
+  }
+
+  public async loadUsersFromFirestore(): Promise<void> {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'users'));
+      this.users = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+      this.triggerListeners();
+    } catch (error) {
+      console.error("Error loading users from Firestore: ", error);
+      this.users = loadFromStorage<User[]>('ff_users', INITIAL_USERS);
+    }
   }
 
   // --- ACTIONS ---
