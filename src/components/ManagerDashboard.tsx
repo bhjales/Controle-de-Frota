@@ -62,6 +62,7 @@ export function ManagerDashboard({
     resolution: string;
     cost: number;
     resolvedAt: string;
+    sentAt: string;
   }
 
   const allMaintenanceEvents: CompiledMaintenanceEvent[] = [];
@@ -75,7 +76,8 @@ export function ManagerDashboard({
         reason: log.reason,
         resolution: log.resolution || 'Concluída',
         cost: log.cost || 0,
-        resolvedAt: log.resolvedAt || new Date().toISOString()
+        resolvedAt: log.resolvedAt || new Date().toISOString(),
+        sentAt: log.sentAt
       });
     });
   });
@@ -89,7 +91,8 @@ export function ManagerDashboard({
         reason: log.reason,
         resolution: log.resolution || 'Concluída',
         cost: log.cost || 0,
-        resolvedAt: log.resolvedAt || new Date().toISOString()
+        resolvedAt: log.resolvedAt || new Date().toISOString(),
+        sentAt: log.sentAt
       });
     });
   });
