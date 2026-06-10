@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Frotas",
+  "description": "Sistema completo para cadastro de veículos, motoristas, check-in, check-out e histórico de viagens de frotas.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
