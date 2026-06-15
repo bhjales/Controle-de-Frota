@@ -1,6 +1,5 @@
-import { db } from '../lib/firebase';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, getDoc, query, where, Timestamp } from 'firebase/firestore';
 import { User, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, MaintenanceLog } from '../types';
+import { supabase } from '../lib/supabase';
 
 // Simple high-quality odometer and dashboard SVGs represented as base64 or clean dataURI to seed initial photos nicely
 const MOCK_ODOMETER_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%231e293b" /><circle cx="200" cy="150" r="100" fill="none" stroke="%2338bdf8" stroke-width="8" stroke-dasharray="300 100" /><path d="M 200 150 L 140 100" stroke="%23ef4444" stroke-width="6" stroke-linecap="round" /><circle cx="200" cy="150" r="12" fill="%23f8fafc" /><rect x="150" y="200" width="100" height="30" rx="4" fill="%230f172a" stroke="%23334155" stroke-width="2" /><text x="200" y="221" font-family="monospace" font-size="16" fill="%2322c55e" font-weight="bold" text-anchor="middle">045230 km</text><text x="200" y="110" font-family="sans-serif" font-size="12" fill="%2394a3b8" text-anchor="middle">HODÔMETRO</text><text x="200" y="270" font-family="sans-serif" font-size="10" fill="%2364748b" text-anchor="middle">FROTA CONTROL - REGISTRO ATIVO</text></svg>';
@@ -8,6 +7,7 @@ const MOCK_ODOMETER_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.o
 const MOCK_CHECKOUT_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%230f172a" /><circle cx="200" cy="150" r="90" fill="none" stroke="%2322c55e" stroke-width="6" /><path d="M 120 150 a 80 80 0 0 1 160 0" fill="none" stroke="%23e2e8f0" stroke-width="3" stroke-dasharray="10 5" /><text x="200" y="145" font-family="sans-serif" font-size="14" fill="%23e2e8f0" text-anchor="middle" font-weight="600">CHECKOUT OK</text><rect x="130" y="170" width="140" height="40" rx="6" fill="%231e293b" /><text x="200" y="195" font-family="monospace" font-size="18" fill="%2338bdf8" font-weight="bold" text-anchor="middle">045410 km</text><path d="M 160 240 L 240 240" stroke="%2322c55e" stroke-width="4" stroke-linecap="round" /><circle cx="200" cy="80" r="10" fill="%2322c55e" /><text x="200" y="265" font-family="sans-serif" font-size="10" fill="%2364748b" text-anchor="middle">Retorno sem avarias registradas</text></svg>';
 
 const MOCK_HORIMETRO_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%230f172a" /><circle cx="200" cy="140" r="85" fill="none" stroke="%23fbbf24" stroke-width="8" stroke-dasharray="320 80" /><path d="M 200 140 L 210 85" stroke="%23f3f4f6" stroke-width="5" stroke-linecap="round" /><circle cx="200" cy="140" r="10" fill="%23fbbf24" /><rect x="130" y="200" width="140" height="32" rx="6" fill="%231e293b" stroke="%234b5563" stroke-width="2" /><text x="200" y="222" font-family="monospace" font-size="16" fill="%23fbbf24" font-weight="bold" text-anchor="middle">001240.5 h</text><text x="200" y="105" font-family="sans-serif" font-size="11" fill="%2394a3b8" text-anchor="middle" font-weight="bold">HORÍMETRO</text><text x="200" y="265" font-family="sans-serif" font-size="9" fill="%234b5563" text-anchor="middle">MAQUINÁRIO REGISTRADO</text></svg>';
+
 
 const INITIAL_EQUIPMENT_TYPES: EquipmentType[] = [
   { id: 'type-1', name: 'Retroescavadeira' },
@@ -298,9 +298,110 @@ export class FleetStore {
   // Listeners list for component re-renders
   private listeners: (() => void)[] = [];
 
+  private async loadFromSupabase() {
+    try {
+      const [
+        { data: users },
+        { data: vehicles },
+        { data: trips },
+        { data: equipments },
+        { data: equipmentUsages },
+        { data: works },
+        { data: equipmentTypes },
+        { data: maintenanceLogs }
+      ] = await Promise.all([
+        supabase.from('users').select('*'),
+        supabase.from('vehicles').select('*'),
+        supabase.from('trips').select('*'),
+        supabase.from('equipments').select('*'),
+        supabase.from('equipment_usages').select('*'),
+        supabase.from('construction_works').select('*'),
+        supabase.from('equipment_types').select('*'),
+        supabase.from('maintenance_logs').select('*')
+      ]);
+
+      if (users && users.length > 0) this.users = users as User[];
+      if (works && works.length > 0) this.works = works as ConstructionWork[];
+      if (equipmentTypes && equipmentTypes.length > 0) this.equipmentTypes = equipmentTypes as EquipmentType[];
+      if (trips && trips.length > 0) this.trips = trips as Trip[];
+      if (equipmentUsages && equipmentUsages.length > 0) this.equipmentUsages = equipmentUsages as EquipmentUsage[];
+      
+      const vData = (vehicles || []) as Vehicle[];
+      const eData = (equipments || []) as Equipment[];
+      const mLogs = (maintenanceLogs || []) as any[];
+
+      // Re-attach maintenance logs
+      if (mLogs.length > 0) {
+        vData.forEach(v => {
+          v.maintenanceHistory = mLogs.filter(log => log.assetId === v.id && log.assetType === 'vehicle');
+        });
+        eData.forEach(e => {
+          e.maintenanceHistory = mLogs.filter(log => log.assetId === e.id && log.assetType === 'equipment');
+        });
+      }
+
+      if (vData.length > 0) this.vehicles = vData;
+      if (eData.length > 0) this.equipments = eData;
+      
+      this.triggerListeners();
+    } catch (error) {
+      console.error("Error loading data from Supabase:", error);
+    }
+  }
+
+  private async syncTable(table: string, items: any[]) {
+    if (!items || items.length === 0) return;
+    try {
+      // Remove any local-only or unexpected properties for Supabase
+      const sanitizedItems = items.map(item => {
+        const copy = { ...item };
+        if (table === 'vehicles' || table === 'equipments') {
+          delete copy.maintenanceHistory;
+        }
+        return copy;
+      });
+      const { error } = await supabase.from(table).upsert(sanitizedItems);
+      if (error) console.error(`Error syncing ${table}:`, error.message);
+    } catch (e) {
+      console.error(`Exception syncing ${table}:`, e);
+    }
+  }
+
+  private async syncMaintenanceLogs() {
+    const logs: any[] = [];
+    this.vehicles.forEach(v => {
+      if (v.maintenanceHistory) {
+        v.maintenanceHistory.forEach(log => {
+          logs.push({ ...log, assetId: v.id, assetType: 'vehicle' });
+        });
+      }
+    });
+    this.equipments.forEach(e => {
+      if (e.maintenanceHistory) {
+        e.maintenanceHistory.forEach(log => {
+          logs.push({ ...log, assetId: e.id, assetType: 'equipment' });
+        });
+      }
+    });
+    if (logs.length > 0) {
+      this.syncTable('maintenance_logs', logs);
+    }
+  }
+
+  private backgroundSync() {
+    this.syncTable('users', this.users);
+    this.syncTable('vehicles', this.vehicles);
+    this.syncTable('trips', this.trips);
+    this.syncTable('equipments', this.equipments);
+    this.syncTable('equipment_usages', this.equipmentUsages);
+    this.syncTable('construction_works', this.works);
+    this.syncTable('equipment_types', this.equipmentTypes);
+    this.syncMaintenanceLogs();
+  }
+
   private constructor() {
     this.loadState();
-    this.loadUsersFromFirestore();
+    this.loadFromSupabase();
   }
 
   public static getInstance(): FleetStore {
@@ -384,6 +485,7 @@ export class FleetStore {
     saveToStorage<EquipmentType[]>('ff_equipment_types', this.equipmentTypes);
     saveToStorage<User | null>('ff_current_user', this.currentUser);
     this.triggerListeners();
+    this.backgroundSync();
   }
 
   public subscribe(listener: () => void): () => void {
@@ -395,17 +497,6 @@ export class FleetStore {
 
   private triggerListeners() {
     this.listeners.forEach(listener => listener());
-  }
-
-  public async loadUsersFromFirestore(): Promise<void> {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'users'));
-      this.users = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
-      this.triggerListeners();
-    } catch (error) {
-      console.error("Error loading users from Firestore: ", error);
-      this.users = loadFromStorage<User[]>('ff_users', INITIAL_USERS);
-    }
   }
 
   // --- ACTIONS ---
