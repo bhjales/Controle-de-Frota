@@ -384,19 +384,30 @@ export class FleetStore {
       }
     });
     if (logs.length > 0) {
-      this.syncTable('maintenance_logs', logs);
+      await this.syncTable('maintenance_logs', logs);
     }
   }
 
-  private backgroundSync() {
-    this.syncTable('users', this.users);
-    this.syncTable('vehicles', this.vehicles);
-    this.syncTable('trips', this.trips);
-    this.syncTable('equipments', this.equipments);
-    this.syncTable('equipment_usages', this.equipmentUsages);
-    this.syncTable('construction_works', this.works);
-    this.syncTable('equipment_types', this.equipmentTypes);
-    this.syncMaintenanceLogs();
+  private async backgroundSync() {
+    try {
+      // 1. Sync baseline tables that have no foreign key dependencies in standard context
+      await this.syncTable('users', this.users);
+      await this.syncTable('construction_works', this.works);
+      await this.syncTable('equipment_types', this.equipmentTypes);
+
+      // 2. Sync independent assets (referencing construction_works optionally)
+      await this.syncTable('vehicles', this.vehicles);
+      await this.syncTable('equipments', this.equipments);
+
+      // 3. Sync operational/checkout entries (referencing users, vehicles, equipments)
+      await this.syncTable('trips', this.trips);
+      await this.syncTable('equipment_usages', this.equipmentUsages);
+
+      // 4. Sync maintenance logs
+      await this.syncMaintenanceLogs();
+    } catch (e) {
+      console.error("Exception in backgroundSync:", e);
+    }
   }
 
   private constructor() {
