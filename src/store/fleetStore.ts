@@ -352,12 +352,43 @@ export class FleetStore {
   private async syncTable(table: string, items: any[]) {
     if (!items || items.length === 0) return;
     try {
+      const userIds = new Set(this.users.map(u => u.id));
+      const workIds = new Set(this.works.map(w => w.id));
+      const vehicleIds = new Set(this.vehicles.map(v => v.id));
+      const equipmentIds = new Set(this.equipments.map(e => e.id));
+
       // Remove any local-only or unexpected properties for Supabase
       const sanitizedItems = items.map(item => {
         const copy = { ...item };
         if (table === 'vehicles' || table === 'equipments') {
           delete copy.maintenanceHistory;
         }
+
+        // Clean up workId foreign key
+        if ('workId' in copy && copy.workId && !workIds.has(copy.workId)) {
+          copy.workId = null;
+        }
+
+        // Clean up trips relation keys
+        if (table === 'trips') {
+          if (copy.driverId && !userIds.has(copy.driverId)) {
+            copy.driverId = null;
+          }
+          if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
+            copy.vehicleId = null;
+          }
+        }
+
+        // Clean up equipment_usages relation keys
+        if (table === 'equipment_usages') {
+          if (copy.operatorId && !userIds.has(copy.operatorId)) {
+            copy.operatorId = null;
+          }
+          if (copy.equipmentId && !equipmentIds.has(copy.equipmentId)) {
+            copy.equipmentId = null;
+          }
+        }
+
         return copy;
       });
       const { error } = await supabase.from(table).upsert(sanitizedItems);
