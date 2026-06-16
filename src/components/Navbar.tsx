@@ -10,6 +10,19 @@ interface NavbarProps {
 }
 
 export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: NavbarProps) {
+  const mobileTabsRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (mobileTabsRef.current) {
+      const activeEl = mobileTabsRef.current.querySelector('.bg-blue-600') as HTMLElement;
+      if (activeEl) {
+        const container = mobileTabsRef.current;
+        const scrollLeft = activeEl.offsetLeft - (container.clientWidth / 2) + (activeEl.clientWidth / 2);
+        container.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+      }
+    }
+  }, [activeTab]);
+
   return (
     <nav id="app_navbar" className="bg-[#0F172A] border-b border-slate-800 sticky top-0 z-30 shadow-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -190,14 +203,18 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
 
       {/* Mobile Tabs (Visible if logged in) */}
       {currentUser && (
-        <div id="mobile_tabs_bar" className="md:hidden border-t border-slate-800 bg-[#0F172A]/90 px-2 py-2 overflow-x-auto flex gap-1 scrollbar-none">
+        <div 
+          id="mobile_tabs_bar" 
+          ref={mobileTabsRef}
+          className="md:hidden border-t border-slate-800 bg-[#0F172A]/90 px-2.5 py-2.5 overflow-x-auto flex gap-1.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent select-none"
+        >
           {currentUser.role !== 'gerencial' && (
             <button
               onClick={() => setActiveTab('my-trips')}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                 activeTab === 'my-trips'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-md font-bold'
+                  : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
               }`}
             >
               🚙 Minha Viagem
@@ -207,10 +224,10 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
           {currentUser.role === 'gerencial' && (
             <button
               onClick={() => setActiveTab('manager-dashboard')}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                 activeTab === 'manager-dashboard'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-md font-bold'
+                  : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
               }`}
             >
               📊 Dashboard Resumo
@@ -220,10 +237,10 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
           {currentUser.role === 'admin' && (
             <button
               onClick={() => setActiveTab('vehicles')}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                 activeTab === 'vehicles'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-md font-bold'
+                  : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
               }`}
             >
               🚘 Veículos
@@ -234,10 +251,10 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
             <button
               id="tab_equipments_mobile_btn"
               onClick={() => setActiveTab('equipments')}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                 activeTab === 'equipments'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-md font-bold'
+                  : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
               }`}
             >
               🚜 Maquinários
@@ -248,20 +265,20 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
             <>
               <button
                 onClick={() => setActiveTab('drivers')}
-                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                   activeTab === 'drivers'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:bg-slate-800'
+                    ? 'bg-blue-600 text-white shadow-md font-bold'
+                    : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
                 }`}
               >
                 👥 Usuários
               </button>
               <button
                 onClick={() => setActiveTab('equipment-types')}
-                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                   activeTab === 'equipment-types'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:bg-slate-800'
+                    ? 'bg-blue-600 text-white shadow-md font-bold'
+                    : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
                 }`}
               >
                 ⚙️ Tipos de Equip.
@@ -271,10 +288,10 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+            className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
               activeTab === 'history'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-300 hover:bg-slate-800'
+                ? 'bg-blue-600 text-white shadow-md font-bold'
+                : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
             }`}
           >
             📋 Relatórios
@@ -284,10 +301,10 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
             <button
               id="tab_works_mobile_btn"
               onClick={() => setActiveTab('works')}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
                 activeTab === 'works'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800'
+                  ? 'bg-blue-600 text-white shadow-md font-bold'
+                  : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
               }`}
             >
               🏗️ Obras

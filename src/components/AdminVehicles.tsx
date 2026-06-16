@@ -360,9 +360,9 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
           />
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 shrink-0 w-full md:w-auto">
           <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Status:</span>
-          <div className="flex gap-1 bg-[#F8FAFC] p-1 rounded-xl border border-slate-150">
+          <div className="flex gap-1 bg-[#F8FAFC] p-1 rounded-xl border border-slate-150 overflow-x-auto scrollbar-none w-full sm:w-auto select-none shrink-0">
             {[
               { id: 'all', label: 'Todos' },
               { id: 'available', label: 'Disponível' },
@@ -372,7 +372,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               <button
                 key={st.id}
                 onClick={() => setFilterStatus(st.id)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap flex-1 sm:flex-initial text-center ${
                   filterStatus === st.id
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/40'
@@ -517,12 +517,12 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                 </div>
 
                 {/* Operations Line */}
-                <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-auto">
-                  <div className="flex gap-1.5">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between pt-4 border-t border-slate-100 mt-auto gap-3">
+                  <div className="flex gap-1.5 flex-1 min-w-0">
                     {vehicle.status !== 'in_use' ? (
                       <button
                         onClick={() => handleOpenMaintenanceModal(vehicle.id, vehicle.status)}
-                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer ${
+                        className={`text-xs font-semibold px-3 py-2 rounded-lg border transition-all flex items-center justify-center gap-1.5 cursor-pointer flex-1 sm:flex-initial text-center ${
                           vehicle.status === 'maintenance'
                             ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
                             : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200'
@@ -532,7 +532,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                         {vehicle.status === 'maintenance' ? 'Liberar da Manutenção' : 'Enviar Manutenção'}
                       </button>
                     ) : (
-                      <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 bg-slate-50 px-2 py-1.5 rounded">
+                      <span className="text-[10px] w-full text-slate-450 font-mono flex items-center justify-center sm:justify-start gap-1.5 bg-slate-50 px-2.5 py-2 rounded border border-slate-100">
                         <PenTool className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
                         Em trânsito com motorista
                       </span>
@@ -542,10 +542,11 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                   <button
                     onClick={() => handleDeleteVehicle(vehicle.id, vehicle.plate)}
                     disabled={vehicle.status === 'in_use'}
-                    className="p-2 text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:pointer-events-none hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 cursor-pointer"
+                    className="p-2 text-slate-400 hover:text-red-00 disabled:opacity-30 disabled:pointer-events-none hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 cursor-pointer flex items-center justify-center"
                     title="Excluir veículo"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4 text-slate-400 hover:text-red-600 transition-colors" />
+                    <span className="sm:hidden text-xs font-semibold ml-1.5">Excluir Veículo</span>
                   </button>
                 </div>
               </div>

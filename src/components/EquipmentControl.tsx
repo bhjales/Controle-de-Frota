@@ -1022,45 +1022,53 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
               {/* Available Machinery Grid to read quickly */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold uppercase text-slate-400 tracking-wider">Disponibilidade Local de Maquinários</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {equipments.map((mach) => (
-                    <div 
-                      key={mach.id}
-                      className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center justify-between gap-4 shadow-2xs hover:shadow-xs transition-shadow"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">🚜</span>
+                {equipments.filter((mach) => currentUser.role === 'admin' || currentUser.role === 'gerencial' || currentUser.authorizedAssetIds?.includes(mach.id)).length === 0 ? (
+                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded-2xl p-6 text-center text-slate-500 text-xs font-bold">
+                    Nenhum maquinário com permissão de acesso vinculado à sua conta.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {equipments
+                      .filter((mach) => currentUser.role === 'admin' || currentUser.role === 'gerencial' || currentUser.authorizedAssetIds?.includes(mach.id))
+                      .map((mach) => (
+                        <div 
+                          key={mach.id}
+                          className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center justify-between gap-4 shadow-2xs hover:shadow-xs transition-shadow"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">🚜</span>
+                              <div>
+                                <span className="text-xs font-mono font-bold text-slate-450 uppercase">{mach.type}</span>
+                                <h5 className="text-sm font-bold text-slate-900 leading-tight">{mach.brand} {mach.model}</h5>
+                              </div>
+                            </div>
+                            <div className="flex gap-4 pt-1 font-mono text-[10px] text-slate-400 font-bold uppercase">
+                              <span>PREFIXO: <strong className="text-slate-650 font-mono">{mach.id}</strong></span>
+                              <span>•</span>
+                              <span>HORAS: <strong className="text-amber-600 font-mono">{mach.currentHours.toFixed(1)} h</strong></span>
+                            </div>
+                          </div>
+
                           <div>
-                            <span className="text-xs font-mono font-bold text-slate-450 uppercase">{mach.type}</span>
-                            <h5 className="text-sm font-bold text-slate-900 leading-tight">{mach.brand} {mach.model}</h5>
+                            {mach.status === 'available' ? (
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-700 font-mono">
+                                DISPONÍVEL
+                              </span>
+                            ) : mach.status === 'in_use' ? (
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-700 font-mono animate-pulse">
+                                EM OPERAÇÃO
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-extrabold bg-red-500/10 text-red-700 font-mono">
+                                REPARO
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <div className="flex gap-4 pt-1 font-mono text-[10px] text-slate-400 font-bold uppercase">
-                          <span>PREFIXO: <strong className="text-slate-650 font-mono">{mach.id}</strong></span>
-                          <span>•</span>
-                          <span>HORAS: <strong className="text-amber-600 font-mono">{mach.currentHours.toFixed(1)} h</strong></span>
-                        </div>
-                      </div>
-
-                      <div>
-                        {mach.status === 'available' ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-700 font-mono">
-                            DISPONÍVEL
-                          </span>
-                        ) : mach.status === 'in_use' ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-700 font-mono animate-pulse">
-                            EM OPERAÇÃO
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-extrabold bg-red-500/10 text-red-700 font-mono">
-                            REPARO
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

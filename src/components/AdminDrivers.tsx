@@ -580,12 +580,12 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                 </div>
 
                 {/* Footer Controls */}
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100 gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-3 border-t border-slate-100 gap-2">
                   {/* Status Toggle Box */}
                   <button
                     onClick={() => handleToggleStatus(driver.id, driver.name, driver.isActive)}
                     disabled={isSelf}
-                    className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border flex items-center gap-1 transition-all cursor-pointer ${
+                    className={`w-full sm:w-auto justify-center text-xs font-semibold px-2.5 py-1.5 rounded-lg border flex items-center gap-1 transition-all cursor-pointer ${
                       !driver.isActive
                         ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-250 animate-pulse'
                         : 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 disabled:opacity-30 disabled:pointer-events-none'
@@ -605,7 +605,7 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                   </button>
 
                   {/* Inline Role Selector Dropdown */}
-                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 focus-within:ring-1 focus-within:ring-blue-500">
+                  <div className="w-full sm:w-auto justify-center flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 focus-within:ring-1 focus-within:ring-blue-500">
                     <Shield className="w-3.5 h-3.5 text-slate-400" />
                     <select
                       value={driver.role}
@@ -617,7 +617,7 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                           alert(res.message);
                         }
                       }}
-                      className="text-xs font-bold bg-transparent text-slate-700 outline-none cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-sans"
+                      className="w-full sm:w-auto text-xs font-bold bg-transparent text-slate-700 outline-none cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-sans"
                     >
                       <option value="driver">Motorista</option>
                       <option value="gerencial">Gerencial</option>
@@ -626,7 +626,7 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                   </div>
                   <button
                     onClick={() => setEditingDriverId(driver.id)}
-                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 flex items-center gap-1 cursor-pointer"
+                    className="w-full sm:w-auto justify-center text-xs font-bold px-2.5 py-1.5 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 flex items-center gap-1 cursor-pointer"
                   >
                     <Key className="w-3.5 h-3.5" />
                     Permissões
