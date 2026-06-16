@@ -1,4 +1,4 @@
-import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, MaintenanceLog } from '../types';
+import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Simple high-quality odometer and dashboard SVGs represented as base64 or clean dataURI to seed initial photos nicely
@@ -15,164 +15,16 @@ const INITIAL_EQUIPMENT_TYPES: EquipmentType[] = [
   { id: 'type-3', name: 'Trator' }
 ];
 
-const INITIAL_VEHICLES: Vehicle[] = [
-  {
-    id: 'ABC-1234',
-    model: 'Onix Hatch LTZ',
-    plate: 'ABC-1234',
-    brand: 'Chevrolet',
-    year: 2022,
-    color: 'Prata',
-    currentKm: 45230,
-    lastMaintenanceKm: 40000,
-    maintenanceIntervalKm: 10000,
-    status: 'available',
-    createdAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'XYZ-9876',
-    model: 'Corolla XEi 2.0',
-    plate: 'XYZ-9876',
-    brand: 'Toyota',
-    year: 2023,
-    color: 'Preto Metálico',
-    currentKm: 18450,
-    lastMaintenanceKm: 15000,
-    maintenanceIntervalKm: 10000,
-    status: 'in_use',
-    createdAt: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'MNO-5555',
-    model: 'Uno Attractive 1.0',
-    plate: 'MNO-5555',
-    brand: 'Fiat',
-    year: 2018,
-    color: 'Branco',
-    currentKm: 123800,
-    lastMaintenanceKm: 120000,
-    maintenanceIntervalKm: 10000,
-    status: 'available',
-    createdAt: new Date(Date.now() - 1000 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'QWE-4422',
-    model: 'HB20 Vision 1.6',
-    plate: 'QWE-4422',
-    brand: 'Hyundai',
-    year: 2021,
-    color: 'Vermelho',
-    currentKm: 35600,
-    lastMaintenanceKm: 30000,
-    maintenanceIntervalKm: 10000,
-    status: 'maintenance',
-    createdAt: new Date(Date.now() - 250 * 24 * 60 * 60 * 1000).toISOString()
-  }
+const INITIAL_VEHICLE_CATEGORIES: VehicleCategory[] = [
+  { id: 'cat-1', name: 'Utilitário' },
+  { id: 'cat-2', name: 'Caminhão' }
 ];
 
-const INITIAL_USERS: User[] = [
-  {
-    id: 'admin-1',
-    loginId: 'admin',
-    name: 'Admin Principal',
-    email: 'admin@frota.com',
-    cpf: '111.111.111-11',
-    licenseNumber: '12345678901',
-    role: 'admin',
-    isActive: true,
-    password: '123456',
-    isApproved: true,
-    createdAt: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'driver-1',
-    loginId: 'joao',
-    name: 'João Silva',
-    email: 'joao@motorista.com',
-    cpf: '222.222.222-22',
-    licenseNumber: '98765432100',
-    role: 'driver',
-    isActive: true,
-    password: '123456',
-    isApproved: true,
-    createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'driver-2',
-    loginId: 'maria',
-    name: 'Maria Souza',
-    email: 'maria@motorista.com',
-    cpf: '333.333.333-33',
-    licenseNumber: '55544433322',
-    role: 'driver',
-    isActive: true,
-    password: '123456',
-    isApproved: true,
-    createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'manager-1',
-    loginId: 'gerente',
-    name: 'Gerente Geral',
-    email: 'gerente@frota.com',
-    cpf: '444.444.444-44',
-    licenseNumber: '00000000000',
-    role: 'gerencial',
-    isActive: true,
-    password: '123456',
-    isApproved: true,
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
+const INITIAL_VEHICLES: Vehicle[] = [];
 
-const INITIAL_TRIPS: Trip[] = [
-  {
-    id: 'trip-completed-1',
-    driverId: 'driver-2',
-    driverName: 'Maria Souza',
-    driverEmail: 'maria@motorista.com',
-    vehicleId: 'ABC-1234',
-    vehicleModelPlate: 'Chevrolet Onix Hatch LTZ (ABC-1234)',
-    status: 'completed',
-    checkIn: {
-      km: 45050,
-      fuel: 'Cheio',
-      destination: 'Cliente Primário BH',
-      reason: 'Visita Comercial / Demonstração do Produto',
-      observations: 'Veículo em perfeito estado, tanque cheio.',
-      photo: MOCK_ODOMETER_PHOTO,
-      time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 4 * 60 * 60 * 1000).toISOString()
-    },
-    checkOut: {
-      km: 45230,
-      fuel: '3/4',
-      observations: 'Viagem tranquila, o carro foi abastecido no retorno. Nenhuma ocorrência.',
-      photo: MOCK_CHECKOUT_PHOTO,
-      time: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
-    },
-    kmDriven: 180,
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 4 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'trip-active-1',
-    driverId: 'driver-1',
-    driverName: 'João Silva',
-    driverEmail: 'joao@motorista.com',
-    vehicleId: 'XYZ-9876',
-    vehicleModelPlate: 'Toyota Corolla XEi 2.0 (XYZ-9876)',
-    status: 'active',
-    checkIn: {
-      km: 18200,
-      fuel: '1/2',
-      destination: 'Filial Campinas SP',
-      reason: 'Entrega de lote de documentos fiscais físicos',
-      observations: 'Ar condicionado funcionando bem, pneu reserva verificado.',
-      photo: MOCK_ODOMETER_PHOTO,
-      time: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
-    },
-    createdAt: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
-  }
-];
+const INITIAL_USERS: User[] = [];
+
+const INITIAL_TRIPS: Trip[] = [];
 
 const INITIAL_EQUIPMENTS: Equipment[] = [
   {
@@ -216,33 +68,7 @@ const INITIAL_EQUIPMENTS: Equipment[] = [
   }
 ];
 
-const INITIAL_EQUIPMENT_USAGES: EquipmentUsage[] = [
-  {
-    id: 'eq-usage-1',
-    operatorId: 'driver-1',
-    operatorName: 'João Silva',
-    operatorEmail: 'joao@motorista.com',
-    equipmentId: 'RET-01',
-    equipmentNameModel: 'Retroescavadeira Caterpillar 416F (RET-01)',
-    status: 'completed',
-    checkIn: {
-      hours: 1235.0,
-      origin: 'Setor de Obras Central',
-      reason: 'Abertura de canaletas e valas',
-      observations: 'Checklist inicial 100% OK, níveis de óleo hidráulico normais.',
-      photo: MOCK_HORIMETRO_PHOTO,
-      time: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 - 8 * 60 * 60 * 1000).toISOString()
-    },
-    checkOut: {
-      hours: 1240.5,
-      observations: 'Trabalho finalizado, equipamento limpo e em prefeito estado.',
-      photo: MOCK_HORIMETRO_PHOTO,
-      time: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 - 2 * 60 * 60 * 1000).toISOString()
-    },
-    hoursWorked: 5.5,
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 - 8 * 60 * 60 * 1000).toISOString()
-  }
-];
+const INITIAL_EQUIPMENT_USAGES: EquipmentUsage[] = [];
 
 
 // Helper to load typed JSON from localstorage
@@ -256,35 +82,7 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
   }
 }
 
-const INITIAL_WORKS: ConstructionWork[] = [
-  {
-    id: 'work-1',
-    name: 'Duplicação da Rodovia BR-101',
-    city: 'Palhoça',
-    state: 'SC',
-    description: 'Obras de ampliação de faixas e vias marginais na BR-101 Sul.',
-    status: 'active',
-    createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'work-2',
-    name: 'Construção de Viaduto Central',
-    city: 'Belo Horizonte',
-    state: 'MG',
-    description: 'Edificação de viaduto de concreto armado para melhoria de tráfego urbano.',
-    status: 'active',
-    createdAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'work-3',
-    name: 'Reforma do Terminal Portuário',
-    city: 'Santos',
-    state: 'SP',
-    description: 'Manutenção estrutural e ampliação de pátio logístico costeiro.',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 95 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
+const INITIAL_WORKS: ConstructionWork[] = [];
 
 // Helper to save serializable JSON is safe
 function saveToStorage<T>(key: string, data: T): void {
@@ -301,6 +99,7 @@ export class FleetStore {
   public equipmentUsages: EquipmentUsage[] = [];
   public works: ConstructionWork[] = [];
   public equipmentTypes: EquipmentType[] = [];
+  public vehicleCategories: VehicleCategory[] = [];
   public currentUser: User | null = null;
 
   // Listeners list for component re-renders
@@ -550,6 +349,7 @@ export class FleetStore {
     this.equipmentUsages = loadFromStorage<EquipmentUsage[]>('ff_equipment_usages', INITIAL_EQUIPMENT_USAGES);
     this.works = loadFromStorage<ConstructionWork[]>('ff_works', INITIAL_WORKS);
     this.equipmentTypes = loadFromStorage<EquipmentType[]>('ff_equipment_types', INITIAL_EQUIPMENT_TYPES);
+    this.vehicleCategories = loadFromStorage<VehicleCategory[]>('ff_vehicle_categories', INITIAL_VEHICLE_CATEGORIES);
     this.currentUser = loadFromStorage<User | null>('ff_current_user', null);
 
     // Dynamic backfill migration: ensure all existing users have a valid loginId, password, and isApproved fields
@@ -559,13 +359,7 @@ export class FleetStore {
       let loginIdValue = u.loginId;
       if (!loginIdValue) {
         let prefix = '';
-        if (u.id === 'admin-1') {
-          prefix = 'admin';
-        } else if (u.id === 'driver-1') {
-          prefix = 'joao';
-        } else if (u.id === 'driver-2') {
-          prefix = 'maria';
-        } else if (u.email) {
+        if (u.email) {
           prefix = u.email.split('@')[0].trim().toLowerCase();
         } else {
           prefix = u.name.split(' ')[0].trim().toLowerCase() + '-' + u.id.replace('user-', '').substring(0, 4);
@@ -595,24 +389,6 @@ export class FleetStore {
       return u;
     });
 
-    // If gerente is missing in this.users (e.g. if loaded from existing storage), backfill them
-    if (!this.users.some(u => u.loginId === 'gerente' || u.role === 'gerencial')) {
-      this.users.push({
-        id: 'manager-1',
-        loginId: 'gerente',
-        name: 'Gerente Geral',
-        email: 'gerente@frota.com',
-        cpf: '444.444.444-44',
-        licenseNumber: '00000000000',
-        role: 'gerencial',
-        isActive: true,
-        password: '123456',
-        isApproved: true,
-        createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-      });
-      migrated = true;
-    }
-
     // If active current user is loaded but lacks loginId, update them too
     if (this.currentUser && !this.currentUser.loginId) {
       migrated = true;
@@ -635,6 +411,7 @@ export class FleetStore {
     saveToStorage<EquipmentUsage[]>('ff_equipment_usages', this.equipmentUsages);
     saveToStorage<ConstructionWork[]>('ff_works', this.works);
     saveToStorage<EquipmentType[]>('ff_equipment_types', this.equipmentTypes);
+    saveToStorage<VehicleCategory[]>('ff_vehicle_categories', this.vehicleCategories);
     saveToStorage<User | null>('ff_current_user', this.currentUser);
     this.triggerListeners();
     this.backgroundSync();
@@ -1463,6 +1240,23 @@ export class FleetStore {
     this.equipmentTypes = this.equipmentTypes.filter(t => t.id !== id);
     this.saveState();
     return { success: true, message: 'Tipo removido.' };
+  }
+
+  public addVehicleCategory(name: string): { success: boolean, message: string } {
+    if (!name.trim()) return { success: false, message: 'Nome da categoria é obrigatório.' };
+    const newCat: VehicleCategory = {
+      id: `cat-${Date.now()}`,
+      name: name.trim()
+    };
+    this.vehicleCategories.unshift(newCat);
+    this.saveState();
+    return { success: true, message: 'Categoria de veículo adicionada!' };
+  }
+
+  public deleteVehicleCategory(id: string): { success: boolean, message: string } {
+    this.vehicleCategories = this.vehicleCategories.filter(c => c.id !== id);
+    this.saveState();
+    return { success: true, message: 'Categoria de veículo removida.' };
   }
 
   public authorizeAssetsToDriver(driverId: string, assetIds: string[]): { success: boolean, message: string } {

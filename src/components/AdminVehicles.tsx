@@ -22,7 +22,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [year, setYear] = useState(new Date().getFullYear());
   const [color, setColor] = useState('');
   const [initialKm, setInitialKm] = useState(0);
-  const [category, setCategory] = useState<'utilitário' | 'caminhão'>('utilitário');
+  const [category, setCategory] = useState<string>(store.vehicleCategories[0]?.name || '');
   const [selectedWorkId, setSelectedWorkId] = useState('');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -35,7 +35,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setYear(vehicle.year);
     setColor(vehicle.color);
     setInitialKm(vehicle.currentKm);
-    setCategory(vehicle.category || 'utilitário');
+    setCategory(vehicle.category || store.vehicleCategories[0]?.name || '');
     setSelectedWorkId(vehicle.workId || '');
     setFormError('');
     setFormSuccess('');
@@ -51,7 +51,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setYear(new Date().getFullYear());
     setColor('');
     setInitialKm(0);
-    setCategory('utilitário');
+    setCategory(store.vehicleCategories[0]?.name || '');
     setSelectedWorkId('');
     setFormError('');
     setFormSuccess('');
@@ -127,7 +127,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         setYear(new Date().getFullYear());
         setColor('');
         setInitialKm(0);
-        setCategory('utilitário');
+        setCategory(store.vehicleCategories[0]?.name || '');
         setSelectedWorkId('');
         
         // Auto close form after briefly showing success
@@ -339,15 +339,18 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               />
             </div>
 
-            <div>
+             <div>
               <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Categoria *</label>
               <select
                 value={category}
-                onChange={(e) => setCategory(e.target.value as 'utilitário' | 'caminhão')}
+                onChange={(e) => setCategory(e.target.value)}
                 className="w-full text-sm bg-[#F8FAFC] focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-2.5 outline-none transition-all font-medium"
               >
-                <option value="utilitário">Utilitário</option>
-                <option value="caminhão">Caminhão</option>
+                {store.vehicleCategories.map(cat => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
               </select>
             </div>
 

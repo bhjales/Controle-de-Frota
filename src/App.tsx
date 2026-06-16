@@ -23,6 +23,7 @@ export default function App() {
   const [equipmentUsages, setEquipmentUsages] = useState(store.equipmentUsages);
   const [works, setWorks] = useState(store.works);
   const [equipmentTypes, setEquipmentTypes] = useState(store.equipmentTypes);
+  const [vehicleCategories, setVehicleCategories] = useState(store.vehicleCategories);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState('my-trips');
@@ -55,6 +56,7 @@ export default function App() {
       setEquipmentUsages([...store.equipmentUsages]);
       setWorks([...store.works]);
       setEquipmentTypes([...store.equipmentTypes]);
+      setVehicleCategories([...store.vehicleCategories]);
     });
     return () => unsubscribe();
   }, [store]);
@@ -169,26 +171,6 @@ export default function App() {
       setTimeout(() => {
         setAuthMode('login');
       }, 5000);
-    } else {
-      setAuthError(res.message);
-    }
-  };
-
-  // Handle preset clicks for quick testing
-  const handleQuickAccess = (id: string) => {
-    setAuthError('');
-    setAuthSuccess('');
-    // Use the default password '123456' for predefined accounts
-    const res = store.login(id, '123456');
-    if (res.success) {
-      setAuthSuccess(`Logado com sucesso como: ${id}`);
-      if (res.user?.role === 'admin') {
-        setActiveTab('drivers');
-      } else if (res.user?.role === 'gerencial') {
-        setActiveTab('manager-dashboard');
-      } else {
-        setActiveTab('my-trips');
-      }
     } else {
       setAuthError(res.message);
     }
@@ -471,9 +453,10 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'equipment-types' && currentUser.role === 'admin' && (
+            {activeTab === 'categories' && currentUser.role === 'admin' && (
               <AdminEquipmentTypes
                 types={equipmentTypes}
+                vehicleCategories={vehicleCategories}
                 store={store}
               />
             )}

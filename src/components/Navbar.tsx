@@ -113,14 +113,14 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
                     </button>
                     <button
                       id="tab_equipment_types_btn"
-                      onClick={() => setActiveTab('equipment-types')}
+                      onClick={() => setActiveTab('categories')}
                       className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                        activeTab === 'equipment-types'
+                        activeTab === 'categories'
                           ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/10'
                           : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
                       }`}
                     >
-                      ⚙️ Tipos de Equip.
+                      ⚙️ Categorias
                     </button>
                   </>
                 )}
@@ -274,14 +274,14 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
                 👥 Usuários
               </button>
               <button
-                onClick={() => setActiveTab('equipment-types')}
+                onClick={() => setActiveTab('categories')}
                 className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${
-                  activeTab === 'equipment-types'
+                  activeTab === 'categories'
                     ? 'bg-blue-600 text-white shadow-md font-bold'
                     : 'text-slate-300 bg-slate-900/50 hover:bg-slate-800 hover:text-white border border-slate-800/45'
                 }`}
               >
-                ⚙️ Tipos de Equip.
+                ⚙️ Categorias
               </button>
             </>
           )}

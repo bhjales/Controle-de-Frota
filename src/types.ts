@@ -47,7 +47,12 @@ export interface Vehicle {
   maintenanceReason?: string;
   maintenanceSentAt?: string;
   maintenanceHistory?: MaintenanceLog[];
-  category?: 'utilitário' | 'caminhão';
+  category?: string;
+}
+
+export interface VehicleCategory {
+  id: string;
+  name: string;
 }
 
 export interface CheckInDetails {
