@@ -58,18 +58,35 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
                 )}
 
                 {currentUser.role === 'admin' && (
+                  <button
+                    id="tab_vehicles_btn"
+                    onClick={() => setActiveTab('vehicles')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      activeTab === 'vehicles'
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/10'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                    }`}
+                  >
+                    🚘 Veículos
+                  </button>
+                )}
+
+                {currentUser.role !== 'gerencial' && (
+                  <button
+                    id="tab_equipments_btn"
+                    onClick={() => setActiveTab('equipments')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      activeTab === 'equipments'
+                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/10'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                    }`}
+                  >
+                    🚜 Maquinários / Horímetro
+                  </button>
+                )}
+
+                {currentUser.role === 'admin' && (
                   <>
-                    <button
-                      id="tab_vehicles_btn"
-                      onClick={() => setActiveTab('vehicles')}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                        activeTab === 'vehicles'
-                          ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/10'
-                          : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
-                      }`}
-                    >
-                      🚘 Veículos
-                    </button>
                     <button
                       id="tab_drivers_btn"
                       onClick={() => setActiveTab('drivers')}
@@ -118,20 +135,6 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
                     }`}
                   >
                     🏗️ Obras
-                  </button>
-                )}
-
-                {currentUser.role !== 'gerencial' && (
-                  <button
-                    id="tab_equipments_btn"
-                    onClick={() => setActiveTab('equipments')}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                      activeTab === 'equipments'
-                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/10'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
-                    }`}
-                  >
-                    🚜 Maquinários / Horímetro
                   </button>
                 )}
               </div>
@@ -215,17 +218,34 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
           )}
           
           {currentUser.role === 'admin' && (
+            <button
+              onClick={() => setActiveTab('vehicles')}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                activeTab === 'vehicles'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              🚘 Veículos
+            </button>
+          )}
+
+          {currentUser.role !== 'gerencial' && (
+            <button
+              id="tab_equipments_mobile_btn"
+              onClick={() => setActiveTab('equipments')}
+              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                activeTab === 'equipments'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              🚜 Maquinários
+            </button>
+          )}
+
+          {currentUser.role === 'admin' && (
             <>
-              <button
-                onClick={() => setActiveTab('vehicles')}
-                className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
-                  activeTab === 'vehicles'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-300 hover:bg-slate-800'
-                }`}
-              >
-                🚘 Veículos
-              </button>
               <button
                 onClick={() => setActiveTab('drivers')}
                 className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
@@ -271,20 +291,6 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
               }`}
             >
               🏗️ Obras
-            </button>
-          )}
-
-          {currentUser.role !== 'gerencial' && (
-            <button
-              id="tab_equipments_mobile_btn"
-              onClick={() => setActiveTab('equipments')}
-              className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold ${
-                activeTab === 'equipments'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              🚜 Maquinários
             </button>
           )}
         </div>

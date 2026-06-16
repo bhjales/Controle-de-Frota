@@ -30,6 +30,7 @@ export default function App() {
   // Login page variables
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [loginId, setLoginId] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   
   // Signup state variables
   const [signupName, setSignupName] = useState('');
@@ -37,6 +38,7 @@ export default function App() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupCpf, setSignupCpf] = useState('');
   const [signupLicense, setSignupLicense] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
 
   // Feedback notifications
   const [authError, setAuthError] = useState('');
@@ -81,10 +83,16 @@ export default function App() {
       return;
     }
 
-    const res = store.login(formattedLoginId);
+    if (!loginPassword) {
+      setAuthError('Por favor, informe sua senha de acesso.');
+      return;
+    }
+
+    const res = store.login(formattedLoginId, loginPassword);
     if (res.success) {
       setAuthSuccess('Bem-vindo de volta! Acessando o sistema...');
       setLoginId('');
+      setLoginPassword('');
       if (res.user?.role === 'admin') {
         setActiveTab('drivers');
       } else if (res.user?.role === 'gerencial') {
@@ -107,6 +115,11 @@ export default function App() {
 
     if (!signupName.trim() || !formattedSignupLoginId || !signupCpf.trim()) {
       setAuthError('Por favor, preencha todos os campos obrigatórios (*).');
+      return;
+    }
+
+    if (!signupPassword) {
+      setAuthError('Por favor, defina uma senha para sua conta administrativa.');
       return;
     }
 
@@ -139,18 +152,23 @@ export default function App() {
       signupCpf, 
       finalLicense, 
       true, // Forces Admin role
-      signupEmail.trim() || undefined
+      signupEmail.trim() || undefined,
+      signupPassword,
+      false // Starts as pending admin approval
     );
 
     if (res.success) {
-      setAuthSuccess('Cadastro de Administrador realizado! Acessando seu painel...');
+      setAuthSuccess('Sua solicitação de cadastro foi registrada com sucesso! Aguarde a liberação por um Administrador (ADM) ativo antes de acessar.');
       // Reset forms
       setSignupName('');
       setSignupLoginId('');
       setSignupEmail('');
       setSignupCpf('');
       setSignupLicense('');
-      setActiveTab('drivers'); // Redirect directly to drivers tab for the new Admin
+      setSignupPassword('');
+      setTimeout(() => {
+        setAuthMode('login');
+      }, 5000);
     } else {
       setAuthError(res.message);
     }
@@ -160,7 +178,8 @@ export default function App() {
   const handleQuickAccess = (id: string) => {
     setAuthError('');
     setAuthSuccess('');
-    const res = store.login(id);
+    // Use the default password '123456' for predefined accounts
+    const res = store.login(id, '123456');
     if (res.success) {
       setAuthSuccess(`Logado com sucesso como: ${id}`);
       if (res.user?.role === 'admin') {
@@ -261,6 +280,22 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div className="space-y-1.55">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">Senha de Acesso</label>
+                    <div className="relative">
+                      <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="password"
+                        placeholder="Sua senha secreta"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full text-sm pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono"
+                        required
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400">Padrão p/ contas pré-cadastradas: <strong className="font-mono text-slate-600">123456</strong></span>
+                  </div>
+
                   {authError && (
                     <div className="bg-red-50 border border-red-150 rounded-xl p-3 text-xs text-red-650 font-medium">
                       ⚠️ {authError}
@@ -345,6 +380,27 @@ export default function App() {
                       onChange={(e) => setSignupEmail(e.target.value)}
                       className="w-full text-sm px-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all"
                     />
+                  </div>
+
+                  <div className="space-y-1.55">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-[#0F172A] font-extrabold">Senha de Acesso *</label>
+                    <div className="relative">
+                      <Shield className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="password"
+                        placeholder="Mínimo 4 caracteres obrigatório"
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
+                        className="w-full text-sm pl-9 pr-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono text-slate-800"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl">
+                    <p className="text-[10px] text-amber-800 leading-relaxed font-semibold">
+                      ⚠️ <strong>Aprovação Obrigatória:</strong> Seu cadastro não será habilitado de imediato. Um administrador ativo precisará aprovar sua conta na guia "Controle de Usuários" para liberar seu acesso físico ao painel.
+                    </p>
                   </div>
 
                   {authError && (

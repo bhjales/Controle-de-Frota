@@ -9,6 +9,8 @@ export interface User {
   licenseNumber: string; // CNH
   role: UserRole;
   isActive: boolean;
+  password?: string; // Password for authentication
+  isApproved?: boolean; // Admin approval level
   authorizedAssetIds?: string[]; // IDs of vehicles or equipment
   createdAt: string;
 }

@@ -1,4 +1,4 @@
-import { User, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, MaintenanceLog } from '../types';
+import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, MaintenanceLog } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Simple high-quality odometer and dashboard SVGs represented as base64 or clean dataURI to seed initial photos nicely
@@ -80,6 +80,8 @@ const INITIAL_USERS: User[] = [
     licenseNumber: '12345678901',
     role: 'admin',
     isActive: true,
+    password: '123456',
+    isApproved: true,
     createdAt: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString()
   },
   {
@@ -91,6 +93,8 @@ const INITIAL_USERS: User[] = [
     licenseNumber: '98765432100',
     role: 'driver',
     isActive: true,
+    password: '123456',
+    isApproved: true,
     createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
   },
   {
@@ -102,6 +106,8 @@ const INITIAL_USERS: User[] = [
     licenseNumber: '55544433322',
     role: 'driver',
     isActive: true,
+    password: '123456',
+    isApproved: true,
     createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
   },
   {
@@ -113,6 +119,8 @@ const INITIAL_USERS: User[] = [
     licenseNumber: '00000000000',
     role: 'gerencial',
     isActive: true,
+    password: '123456',
+    isApproved: true,
     createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
   }
 ];
@@ -300,24 +308,38 @@ export class FleetStore {
 
   private async loadFromSupabase() {
     try {
+      const fetchTable = async (tableName: string) => {
+        try {
+          const { data, error } = await supabase.from(tableName).select('*');
+          if (error) {
+            console.warn(`Error loading table '${tableName}' from Supabase:`, error.message);
+            return [];
+          }
+          return data || [];
+        } catch (e: any) {
+          console.warn(`Exception loading table '${tableName}' from Supabase:`, e?.message || e);
+          return [];
+        }
+      };
+
       const [
-        { data: users },
-        { data: vehicles },
-        { data: trips },
-        { data: equipments },
-        { data: equipmentUsages },
-        { data: works },
-        { data: equipmentTypes },
-        { data: maintenanceLogs }
+        users,
+        vehicles,
+        trips,
+        equipments,
+        equipmentUsages,
+        works,
+        equipmentTypes,
+        maintenanceLogs
       ] = await Promise.all([
-        supabase.from('users').select('*'),
-        supabase.from('vehicles').select('*'),
-        supabase.from('trips').select('*'),
-        supabase.from('equipments').select('*'),
-        supabase.from('equipment_usages').select('*'),
-        supabase.from('construction_works').select('*'),
-        supabase.from('equipment_types').select('*'),
-        supabase.from('maintenance_logs').select('*')
+        fetchTable('users'),
+        fetchTable('vehicles'),
+        fetchTable('trips'),
+        fetchTable('equipments'),
+        fetchTable('equipment_usages'),
+        fetchTable('construction_works'),
+        fetchTable('equipment_types'),
+        fetchTable('maintenance_logs')
       ]);
 
       if (users && users.length > 0) this.users = users as User[];
@@ -345,7 +367,7 @@ export class FleetStore {
       
       this.triggerListeners();
     } catch (error) {
-      console.error("Error loading data from Supabase:", error);
+      console.warn("Exception during overall Supabase state loader:", error);
     }
   }
 
@@ -357,44 +379,111 @@ export class FleetStore {
       const vehicleIds = new Set(this.vehicles.map(v => v.id));
       const equipmentIds = new Set(this.equipments.map(e => e.id));
 
-      // Remove any local-only or unexpected properties for Supabase
-      const sanitizedItems = items.map(item => {
-        const copy = { ...item };
-        if (table === 'vehicles' || table === 'equipments') {
-          delete copy.maintenanceHistory;
-        }
-
-        // Clean up workId foreign key
-        if ('workId' in copy && copy.workId && !workIds.has(copy.workId)) {
-          copy.workId = null;
-        }
-
-        // Clean up trips relation keys
-        if (table === 'trips') {
-          if (copy.driverId && !userIds.has(copy.driverId)) {
-            copy.driverId = null;
+      const getSanitizedItems = (colsToExclude: string[]) => {
+        return items.map(item => {
+          const copy = { ...item };
+          if (table === 'vehicles' || table === 'equipments') {
+            delete copy.maintenanceHistory;
           }
-          if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
-            copy.vehicleId = null;
+
+          // Clean up workId foreign key
+          if ('workId' in copy && copy.workId && !workIds.has(copy.workId)) {
+            copy.workId = null;
+          }
+
+          // Clean up trips relation keys
+          if (table === 'trips') {
+            if (copy.driverId && !userIds.has(copy.driverId)) {
+              copy.driverId = null;
+            }
+            if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
+              copy.vehicleId = null;
+            }
+          }
+
+          // Clean up equipment_usages relation keys
+          if (table === 'equipment_usages') {
+            if (copy.operatorId && !userIds.has(copy.operatorId)) {
+              copy.operatorId = null;
+            }
+            if (copy.equipmentId && !equipmentIds.has(copy.equipmentId)) {
+              copy.equipmentId = null;
+            }
+          }
+
+          // Apply dynamic column exclusion list
+          for (const col of colsToExclude) {
+            delete copy[col];
+          }
+
+          return copy;
+        });
+      };
+
+      let columnsToExclude: string[] = [];
+      let sanitized = getSanitizedItems(columnsToExclude);
+      
+      let { error } = await supabase.from(table).upsert(sanitized);
+
+      if (error) {
+        // Check if there is a missing column schema error
+        const isColumnSchemaError = 
+          error.message.includes('schema cache') || 
+          error.message.includes('column') || 
+          error.message.includes('does not exist');
+
+        if (isColumnSchemaError) {
+          // Detect missing columns dynamically if matches
+          const match = error.message.match(/Could not find the '([^']+)' column/i);
+          if (match && match[1]) {
+            columnsToExclude.push(match[1]);
+          } else {
+            // Under users table, fallback to strip 'isApproved' and 'password' pre-emptively
+            if (table === 'users') {
+              if (error.message.includes('isApproved')) {
+                columnsToExclude.push('isApproved');
+              }
+              if (error.message.includes('password')) {
+                columnsToExclude.push('password');
+              }
+              if (columnsToExclude.length === 0) {
+                columnsToExclude.push('isApproved', 'password');
+              }
+            }
+          }
+
+          if (columnsToExclude.length > 0) {
+            sanitized = getSanitizedItems(columnsToExclude);
+            const retryRes = await supabase.from(table).upsert(sanitized);
+            error = retryRes.error;
+
+            if (error) {
+              const match2 = error.message.match(/Could not find the '([^']+)' column/i);
+              if (match2 && match2[1] && !columnsToExclude.includes(match2[1])) {
+                columnsToExclude.push(match2[1]);
+                sanitized = getSanitizedItems(columnsToExclude);
+                const retryRes2 = await supabase.from(table).upsert(sanitized);
+                error = retryRes2.error;
+              }
+            }
           }
         }
+      }
 
-        // Clean up equipment_usages relation keys
-        if (table === 'equipment_usages') {
-          if (copy.operatorId && !userIds.has(copy.operatorId)) {
-            copy.operatorId = null;
-          }
-          if (copy.equipmentId && !equipmentIds.has(copy.equipmentId)) {
-            copy.equipmentId = null;
-          }
+      if (error) {
+        // If it's a "Failed to fetch" (network/offline error), log as warning instead of console.error to keep the app functional
+        if (error.message && error.message.includes('Failed to fetch')) {
+          console.warn(`[Supabase Offline/Blocked] Failed to sync ${table} - local changes are fully preserved locally.`);
+        } else {
+          console.error(`Error syncing ${table}:`, error.message);
         }
-
-        return copy;
-      });
-      const { error } = await supabase.from(table).upsert(sanitizedItems);
-      if (error) console.error(`Error syncing ${table}:`, error.message);
-    } catch (e) {
-      console.error(`Exception syncing ${table}:`, e);
+      }
+    } catch (e: any) {
+      if (e && e.message && e.message.includes('Failed to fetch')) {
+        console.warn(`[Supabase Offline/Blocked] Exception syncing ${table} - connection unavailable.`);
+      } else {
+        console.error(`Exception syncing ${table}:`, e);
+      }
     }
   }
 
@@ -463,11 +552,12 @@ export class FleetStore {
     this.equipmentTypes = loadFromStorage<EquipmentType[]>('ff_equipment_types', INITIAL_EQUIPMENT_TYPES);
     this.currentUser = loadFromStorage<User | null>('ff_current_user', null);
 
-    // Dynamic backfill migration: ensure all existing users have a valid loginId
+    // Dynamic backfill migration: ensure all existing users have a valid loginId, password, and isApproved fields
     let migrated = false;
     this.users = this.users.map(u => {
-      if (!u.loginId) {
-        migrated = true;
+      let changed = false;
+      let loginIdValue = u.loginId;
+      if (!loginIdValue) {
         let prefix = '';
         if (u.id === 'admin-1') {
           prefix = 'admin';
@@ -482,7 +572,25 @@ export class FleetStore {
         }
         // Cleanup any unexpected characters from migrated loginId
         prefix = prefix.replace(/[^a-z0-9._-]/g, '');
-        return { ...u, loginId: prefix || 'user_' + u.id };
+        loginIdValue = prefix || 'user_' + u.id;
+        changed = true;
+      }
+
+      let passwordValue = u.password;
+      if (!passwordValue) {
+        passwordValue = '123456';
+        changed = true;
+      }
+
+      let approvedValue = u.isApproved;
+      if (approvedValue === undefined) {
+        approvedValue = true;
+        changed = true;
+      }
+
+      if (changed) {
+        migrated = true;
+        return { ...u, loginId: loginIdValue, password: passwordValue, isApproved: approvedValue };
       }
       return u;
     });
@@ -498,6 +606,8 @@ export class FleetStore {
         licenseNumber: '00000000000',
         role: 'gerencial',
         isActive: true,
+        password: '123456',
+        isApproved: true,
         createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       });
       migrated = true;
@@ -543,7 +653,16 @@ export class FleetStore {
 
   // --- ACTIONS ---
 
-  public signup(name: string, loginId: string, cpf: string, licenseNumber: string, isDefaultAdmin: boolean = false, email?: string): { success: boolean, message: string } {
+  public signup(
+    name: string, 
+    loginId: string, 
+    cpf: string, 
+    licenseNumber: string, 
+    isDefaultAdminOrRole: boolean | UserRole = false, 
+    email?: string,
+    password?: string,
+    isApproved?: boolean
+  ): { success: boolean, message: string } {
     const normalizedLogin = loginId.trim().toLowerCase();
     
     // Check duplicates
@@ -554,6 +673,21 @@ export class FleetStore {
       return { success: false, message: 'Este CPF já está cadastrado.' };
     }
 
+    // Determine authorization status
+    // If an Admin creates a user within the dashboard, authorize immediately.
+    // Else, it starts as pending (isApproved = false) and needs ADM review.
+    const hasAdminSession = this.currentUser && this.currentUser.role === 'admin';
+    const determinedApproved = isApproved !== undefined ? isApproved : hasAdminSession;
+
+    let determinedRole: UserRole = 'driver';
+    if (typeof isDefaultAdminOrRole === 'string') {
+      determinedRole = isDefaultAdminOrRole;
+    } else if (isDefaultAdminOrRole === true) {
+      determinedRole = 'admin';
+    } else if (normalizedLogin.includes('admin')) {
+      determinedRole = 'admin';
+    }
+
     const newUser: User = {
       id: `user-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       loginId: normalizedLogin,
@@ -561,35 +695,81 @@ export class FleetStore {
       email: email ? email.trim() : undefined,
       cpf: cpf.trim(),
       licenseNumber: licenseNumber.trim(),
-      role: isDefaultAdmin || normalizedLogin.includes('admin') ? 'admin' : 'driver',
+      role: determinedRole,
       isActive: true,
+      password: password || '123456',
+      isApproved: !!determinedApproved,
       createdAt: new Date().toISOString()
     };
 
     this.users.push(newUser);
-    // Only auto-login if the action wasn't triggered by an active Admin in control
-    if (!this.currentUser || this.currentUser.role !== 'admin') {
+    
+    // Only auto-login if they are immediately approved AND we aren't in an active admin session
+    if (!!determinedApproved && !hasAdminSession) {
       this.currentUser = newUser;
     }
+    
     this.saveState();
-    return { success: true, message: 'Motorista cadastrado com sucesso!' };
+    return { 
+      success: true, 
+      message: determinedApproved 
+        ? 'Usuário cadastrado com sucesso!' 
+        : 'Sua solicitação de cadastro foi realizada! Aguarde a autorização de um Administrador (ADM) antes de fazer login.'
+    };
   }
 
-  public login(loginId: string): { success: boolean, user?: User, message: string } {
+  public login(loginId: string, password?: string): { success: boolean, user?: User, message: string } {
     const normalizedLogin = loginId.trim().toLowerCase();
     const user = this.users.find(u => (u.loginId || '').toLowerCase() === normalizedLogin || (u.email && u.email.toLowerCase() === normalizedLogin));
 
     if (!user) {
-      return { success: false, message: 'Usuário de acesso não encontrado. Certifique-se com o Administrador se seu login foi pré-cadastrado.' };
+      return { success: false, message: 'Usuário de acesso não encontrado. Certifique-se com o Administrador se seu login foi cadastrado.' };
+    }
+
+    if (user.isApproved === false) {
+      return { 
+        success: false, 
+        message: 'Acesso recusado. Seu cadastro está pendente de aprovação por um Administrador (ADM).' 
+      };
     }
 
     if (!user.isActive) {
       return { success: false, message: 'Este cadastro foi suspenso pelo administrador.' };
     }
 
+    const userPassword = user.password || '123456';
+    if (password !== undefined) {
+      if (password !== userPassword) {
+        return { success: false, message: 'Senha inválida de acesso. Por favor, digite novamente.' };
+      }
+    } else {
+      return { success: false, message: 'Senha requerida.' };
+    }
+
     this.currentUser = user;
     this.saveState();
     return { success: true, user, message: 'Login efetuado com sucesso.' };
+  }
+
+  public approveUser(userId: string): { success: boolean, message: string } {
+    const user = this.users.find(u => u.id === userId);
+    if (!user) {
+      return { success: false, message: 'Usuário não localizado.' };
+    }
+    user.isApproved = true;
+    this.users = this.users.map(u => u.id === userId ? { ...u, isApproved: true } : u);
+    this.saveState();
+    return { success: true, message: `O usuário "${user.name}" foi aprovado com sucesso!` };
+  }
+
+  public rejectUser(userId: string): { success: boolean, message: string } {
+    const user = this.users.find(u => u.id === userId);
+    if (!user) {
+      return { success: false, message: 'Usuário não localizado.' };
+    }
+    this.users = this.users.filter(u => u.id !== userId);
+    this.saveState();
+    return { success: true, message: `A solicitação de "${user.name}" foi rejeitada e removida.` };
   }
 
   public logout() {
@@ -738,6 +918,34 @@ export class FleetStore {
 
     this.saveState();
     return { success: true, message: `O cargo de ${driver.name} foi atualizado para ${newRole === 'admin' ? 'Administrador' : 'Motorista'}.` };
+  }
+
+  public changeDriverRole(driverId: string, newRole: UserRole): { success: boolean, message: string } {
+    const driver = this.users.find(u => u.id === driverId);
+    if (!driver) {
+      return { success: false, message: 'Usuário não encontrado.' };
+    }
+
+    // Safety: don't let admin demote themselves from admin to avoid losing admin lock
+    if (this.currentUser && this.currentUser.id === driverId && driver.role === 'admin' && newRole !== 'admin') {
+      return { success: false, message: 'Você não pode alterar seu próprio perfil de cargo para evitar a perda do seu perfil de administrador.' };
+    }
+
+    driver.role = newRole;
+    this.users = this.users.map(u => u.id === driverId ? { ...u, role: newRole } : u);
+
+    // If we edited current logged user, sync it
+    if (this.currentUser && this.currentUser.id === driverId) {
+      this.currentUser.role = newRole;
+    }
+
+    this.saveState();
+    
+    let cargoNome = 'Motorista';
+    if (newRole === 'admin') cargoNome = 'Administrador';
+    if (newRole === 'gerencial') cargoNome = 'Gerencial (Coordenador)';
+    
+    return { success: true, message: `O cargo de ${driver.name} foi atualizado para ${cargoNome} com sucesso.` };
   }
 
   public toggleDriverStatus(driverId: string): { success: boolean, message: string } {

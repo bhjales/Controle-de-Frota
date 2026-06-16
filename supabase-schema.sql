@@ -31,6 +31,8 @@ CREATE TABLE public.users (
   "licenseNumber" TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('admin', 'driver', 'gerencial')),
   "isActive" BOOLEAN DEFAULT true,
+  "password" TEXT DEFAULT '123456',
+  "isApproved" BOOLEAN DEFAULT true,
   "authorizedAssetIds" TEXT[], -- Array de ids para controlar os veículos vinculados
   "createdAt" TIMESTAMPTZ DEFAULT NOW()
 );

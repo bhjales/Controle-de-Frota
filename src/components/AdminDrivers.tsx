@@ -13,7 +13,7 @@ import {
   AlertCircle, 
   Sparkles 
 } from 'lucide-react';
-import { User, Vehicle, Equipment } from '../types';
+import { User, Vehicle, Equipment, UserRole } from '../types';
 import { FleetStore } from '../store/fleetStore';
 
 interface AdminDriversProps {
@@ -44,9 +44,11 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
   const [cpf, setCpf] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'driver'>('driver');
+  const [role, setRole] = useState<UserRole>('driver');
+  const [userPassword, setUserPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [approvalFeedback, setApprovalFeedback] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const handleToggleRole = (id: string, name: string, currentRole: string) => {
     const cargoLabel = currentRole === 'admin' ? 'Motorista Comum' : 'Administrador do Sistema';
@@ -79,6 +81,11 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
 
     if (!formattedLoginId || !name.trim() || !cpf.trim()) {
       setErrorMsg('Por favor, preencha todos os campos obrigatórios (*).');
+      return;
+    }
+
+    if (!userPassword.trim()) {
+      setErrorMsg('Por favor, defina uma senha de acesso inicial para o usuário.');
       return;
     }
 
@@ -118,17 +125,20 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
       formattedLoginId,
       cpf.trim(),
       finalLicense,
-      role === 'admin',
-      email.trim() || undefined
+      role,
+      email.trim() || undefined,
+      userPassword,
+      true // Admin registrations are approved immediately
     );
 
     if (res.success) {
-      setSuccessMsg(`Usuário "${name}" pré-cadastrado com sucesso como ${role === 'admin' ? 'Administrador' : 'Motorista'}!`);
+      setSuccessMsg(`Usuário "${name}" cadastrado e autorizado com sucesso!`);
       setLoginId('');
       setName('');
       setCpf('');
       setLicenseNumber('');
       setEmail('');
+      setUserPassword('');
       setRole('driver');
       setTimeout(() => {
         setSuccessMsg('');
@@ -139,8 +149,33 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
     }
   };
 
+  const handleApproveUser = (userId: string) => {
+    setApprovalFeedback(null);
+    const res = store.approveUser(userId);
+    if (res.success) {
+      setApprovalFeedback({ type: 'success', text: res.message });
+      setTimeout(() => setApprovalFeedback(null), 4000);
+    } else {
+      setApprovalFeedback({ type: 'error', text: res.message });
+    }
+  };
+
+  const handleRejectUser = (userId: string) => {
+    setApprovalFeedback(null);
+    const res = store.rejectUser(userId);
+    if (res.success) {
+      setApprovalFeedback({ type: 'success', text: res.message });
+      setTimeout(() => setApprovalFeedback(null), 4000);
+    } else {
+      setApprovalFeedback({ type: 'error', text: res.message });
+    }
+  };
+
   // Filter list by search terms (supporting ID, loginId, name, email, cpf, cnh)
   const filteredDrivers = drivers.filter((drv) => {
+    if (drv.isApproved === false) {
+      return false; // Skip unapproved signup requests as they are placed in their own outstanding queue
+    }
     const term = search.toLowerCase();
     return (
       drv.name.toLowerCase().includes(term) ||
@@ -288,16 +323,17 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
               </label>
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as 'admin' | 'driver')}
+                onChange={(e) => setRole(e.target.value as UserRole)}
                 className="w-full text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-2.5 outline-none transition-all font-bold text-slate-700"
               >
                 <option value="driver">Motorista / Operador (Padrão)</option>
+                <option value="gerencial">Coordenador / Gerencial (Dashboard e Relatórios)</option>
                 <option value="admin">Administrador do Sistema (Acesso Total)</option>
               </select>
             </div>
 
             {/* Email Opcional */}
-            <div className="space-y-1.5 md:col-span-3">
+            <div className="space-y-1.5 md:col-span-2">
               <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                 E-mail Corporativo ou de Backup (Opcional)
               </label>
@@ -307,6 +343,21 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full text-sm px-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-medium"
+              />
+            </div>
+
+            {/* Senha Inicial */}
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                Definir Senha de Acesso *
+              </label>
+              <input
+                type="password"
+                placeholder="Defina uma senha"
+                value={userPassword}
+                onChange={(e) => setUserPassword(e.target.value)}
+                className="w-full text-sm px-4 py-2.5 bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-mono font-bold text-blue-900"
+                required
               />
             </div>
           </div>
@@ -336,6 +387,94 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
           </div>
         </form>
       )}
+
+      {/* SOLICITAÇÕES DE CADASTRO PENDENTES */}
+      {(() => {
+        const pendingDrivers = drivers.filter((drv) => drv.isApproved === false);
+        if (pendingDrivers.length === 0) return null;
+        return (
+          <div id="pending_approvals_container" className="bg-[#FFFBEB] border border-amber-200/80 p-5 rounded-3xl space-y-4 shadow-2xs animate-fade-in text-slate-900">
+            <div className="flex items-center justify-between border-b border-amber-100 pb-2">
+              <h3 className="text-sm font-extrabold text-amber-900 tracking-tight flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                ⏳ Solicitações de Cadastro Pendentes ({pendingDrivers.length})
+              </h3>
+              <span className="text-[10px] uppercase font-mono font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-200/40">
+                Requer aprovação de um ADM
+              </span>
+            </div>
+
+            {approvalFeedback && (
+              <div className={`p-3 rounded-xl text-xs font-bold leading-relaxed ${
+                approvalFeedback.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800 animate-fade-in' : 'bg-red-50 border border-red-200 text-red-800'
+              }`}>
+                {approvalFeedback.type === 'success' ? '➔ ' : '⚠️ '} {approvalFeedback.text}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {pendingDrivers.map((driver) => (
+                <div 
+                  key={driver.id} 
+                  className="bg-white border border-amber-200/50 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-3xs hover:border-amber-300 transition-all font-medium text-slate-700"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-150">
+                      <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-250/20">
+                        {driver.role === 'admin' ? '🛡️ ADM SOLICITADO' : '👤 MOTORISTA'}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {new Date(driver.createdAt).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+
+                    <h4 className="font-extrabold text-slate-900 text-sm leading-tight">{driver.name}</h4>
+                    
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Usuário:</span>
+                        <strong className="font-mono text-[#0F172A] pb-0.5">{driver.loginId}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">CPF:</span>
+                        <strong className="font-mono text-slate-700">{driver.cpf}</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">CNH:</span>
+                        <strong className="font-mono text-slate-700">{driver.licenseNumber}</strong>
+                      </div>
+                      {driver.email && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">E-mail:</span>
+                          <strong className="text-slate-600 truncate max-w-[140px] font-mono">{driver.email}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2.5 pt-2.5 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => handleRejectUser(driver.id)}
+                      className="flex-1 py-1.5 bg-slate-50 hover:bg-slate-150 text-slate-700 text-[11px] font-extrabold rounded-lg transition-all cursor-pointer border border-slate-200"
+                    >
+                      Recusar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApproveUser(driver.id)}
+                      className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-extrabold rounded-lg transition-all shadow-3xs cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5 text-white" />
+                      Autorizar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Search Filter */}
       <div className="bg-white border border-slate-200 rounded-3xl p-4">
@@ -371,6 +510,8 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                     ? 'border-red-200 bg-red-50/10'
                     : driver.role === 'admin'
                     ? 'border-emerald-250 bg-emerald-500/5'
+                    : driver.role === 'gerencial'
+                    ? 'border-purple-250 bg-purple-500/5'
                     : 'border-slate-200'
                 }`}
               >
@@ -387,6 +528,11 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono">
                           <Shield className="w-3 h-3" />
                           Admin
+                        </span>
+                      ) : driver.role === 'gerencial' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 font-mono">
+                          <Shield className="w-3 h-3 text-purple-600" />
+                          Gerencial
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-250 font-mono">
@@ -458,19 +604,26 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                     )}
                   </button>
 
-                  {/* Promote/Demote Toggle Box */}
-                  <button
-                    onClick={() => handleToggleRole(driver.id, driver.name, driver.role)}
-                    disabled={isSelf}
-                    className={`text-xs font-bold px-2.5 py-1.5 rounded-lg border flex items-center gap-1 transition-all ${
-                      driver.role === 'admin'
-                        ? 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800'
-                        : 'bg-blue-50 hover:bg-blue-105 border-blue-200 text-blue-800'
-                    } disabled:opacity-30 disabled:pointer-events-none cursor-pointer`}
-                  >
-                    <Shield className="w-3.5 h-3.5" />
-                    {driver.role === 'admin' ? 'Tornar Motorista' : 'Promover a Admin'}
-                  </button>
+                  {/* Inline Role Selector Dropdown */}
+                  <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 focus-within:ring-1 focus-within:ring-blue-500">
+                    <Shield className="w-3.5 h-3.5 text-slate-400" />
+                    <select
+                      value={driver.role}
+                      disabled={isSelf}
+                      onChange={(e) => {
+                        const newRole = e.target.value as UserRole;
+                        const res = store.changeDriverRole(driver.id, newRole);
+                        if (!res.success) {
+                          alert(res.message);
+                        }
+                      }}
+                      className="text-xs font-bold bg-transparent text-slate-700 outline-none cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-sans"
+                    >
+                      <option value="driver">Motorista</option>
+                      <option value="gerencial">Gerencial</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
                   <button
                     onClick={() => setEditingDriverId(driver.id)}
                     className="text-xs font-bold px-2.5 py-1.5 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 flex items-center gap-1 cursor-pointer"
