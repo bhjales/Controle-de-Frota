@@ -12,4 +12,12 @@ const supabaseUrl = envUrl && envUrl.startsWith('http') ? cleanUrl(envUrl) : 'ht
 const fallbackKey = 'sb_publishable_X8vOik0n-eX-vHcucCBqgg_cs-Usl3O';
 const supabaseAnonKey = envKey && envKey.length > 20 ? envKey : fallbackKey;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: {
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+    },
+  },
+});
