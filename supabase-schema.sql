@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS public.maintenance_logs CASCADE;
 DROP TABLE IF EXISTS public.equipments CASCADE;
 DROP TABLE IF EXISTS public.vehicles CASCADE;
 DROP TABLE IF EXISTS public.equipment_types CASCADE;
+DROP TABLE IF EXISTS public.vehicle_categories CASCADE;
 DROP TABLE IF EXISTS public.users CASCADE;
 DROP TABLE IF EXISTS public.construction_works CASCADE;
 
@@ -43,6 +44,12 @@ CREATE TABLE public.equipment_types (
   name TEXT NOT NULL
 );
 
+-- Categorias de Veículos (Vehicle Categories)
+CREATE TABLE public.vehicle_categories (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
 -- Veículos (Vehicles)
 CREATE TABLE public.vehicles (
   id TEXT PRIMARY KEY,
@@ -60,7 +67,7 @@ CREATE TABLE public.vehicles (
   "workName" TEXT,
   "maintenanceReason" TEXT,
   "maintenanceSentAt" TIMESTAMPTZ,
-  category TEXT CHECK (category IN ('utilitário', 'caminhão')),
+  category TEXT, 
   "createdAt" TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -140,6 +147,7 @@ CREATE TABLE public.equipment_usages (
 ALTER TABLE public.construction_works ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.equipment_types ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehicle_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.equipments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.maintenance_logs ENABLE ROW LEVEL SECURITY;
@@ -149,6 +157,7 @@ ALTER TABLE public.equipment_usages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all access" ON public.construction_works FOR ALL USING (true);
 CREATE POLICY "Enable all access" ON public.users FOR ALL USING (true);
 CREATE POLICY "Enable all access" ON public.equipment_types FOR ALL USING (true);
+CREATE POLICY "Enable all access" ON public.vehicle_categories FOR ALL USING (true);
 CREATE POLICY "Enable all access" ON public.vehicles FOR ALL USING (true);
 CREATE POLICY "Enable all access" ON public.equipments FOR ALL USING (true);
 CREATE POLICY "Enable all access" ON public.maintenance_logs FOR ALL USING (true);

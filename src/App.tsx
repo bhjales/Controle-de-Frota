@@ -194,7 +194,7 @@ export default function App() {
       />
 
       {/* Main Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-8 sm:px-6 lg:px-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 pt-20 pb-8 sm:px-6 lg:px-8">
         
         {!currentUser ? (
           /* ========================================================
