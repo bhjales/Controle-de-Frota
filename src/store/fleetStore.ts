@@ -965,6 +965,60 @@ export class FleetStore {
     return { success: true, message: `Status de ${driver.name} alterado para ${newStatus ? 'Ativo' : 'Suspenso'}.` };
   }
 
+  public updateUserDetails(
+    id: string,
+    details: {
+      name: string;
+      loginId: string;
+      cpf: string;
+      licenseNumber: string;
+      email?: string;
+      password?: string;
+      role: UserRole;
+    }
+  ): { success: boolean, message: string } {
+    const userIndex = this.users.findIndex(u => u.id === id);
+    if (userIndex === -1) {
+      return { success: false, message: 'Usuário não encontrado.' };
+    }
+
+    const current = this.users[userIndex];
+    if (this.currentUser && this.currentUser.id === id && current.role === 'admin' && details.role !== 'admin') {
+      return { success: false, message: 'Você não pode rebaixar seu próprio perfil de administrador para evitar o bloqueio de acesso.' };
+    }
+
+    const normalizedLogin = details.loginId.trim().toLowerCase();
+    const duplicateLogin = this.users.find(u => u.id !== id && (u.loginId || '').toLowerCase() === normalizedLogin);
+    if (duplicateLogin) {
+      return { success: false, message: 'Este Login de Usuário já está sendo utilizado por outro cadastro.' };
+    }
+
+    const duplicateCpf = this.users.find(u => u.id !== id && u.cpf === details.cpf.trim());
+    if (duplicateCpf) {
+      return { success: false, message: 'Este CPF já está sendo utilizado por outro usuário.' };
+    }
+
+    const updatedUser: User = {
+      ...current,
+      name: details.name.trim(),
+      loginId: normalizedLogin,
+      cpf: details.cpf.trim(),
+      licenseNumber: details.licenseNumber.trim(),
+      email: details.email ? details.email.trim() : undefined,
+      password: details.password ? details.password.trim() : current.password,
+      role: details.role,
+    };
+
+    this.users[userIndex] = updatedUser;
+
+    if (this.currentUser && this.currentUser.id === id) {
+      this.currentUser = updatedUser;
+    }
+
+    this.saveState();
+    return { success: true, message: 'Cadastro do usuário atualizado com sucesso!' };
+  }
+
   public checkInTrip(vehicleId: string, details: Omit<CheckInDetails, 'time'>, workId?: string): { success: boolean, message: string } {
     if (!this.currentUser) {
       return { success: false, message: 'É necessário estar autenticado para abrir viagem.' };

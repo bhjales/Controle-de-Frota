@@ -56,7 +56,7 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
                   </button>
                 )}
 
-                {currentUser.role === 'gerencial' && (
+                {(currentUser.role === 'gerencial' || currentUser.role === 'admin') && (
                   <button
                     id="tab_manager_dashboard_btn"
                     onClick={() => setActiveTab('manager-dashboard')}
@@ -221,7 +221,7 @@ export function Navbar({ currentUser, activeTab, setActiveTab, onLogout }: Navba
             </button>
           )}
 
-          {currentUser.role === 'gerencial' && (
+          {(currentUser.role === 'gerencial' || currentUser.role === 'admin') && (
             <button
               onClick={() => setActiveTab('manager-dashboard')}
               className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all ${

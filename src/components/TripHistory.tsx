@@ -185,7 +185,7 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                     {/* Km driven badge */}
                     {isCompleted && (
                       <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl px-4 py-2.5 text-right shrink-0">
-                        <span className="text-[9px] uppercase font-bold text-emerald-800 tracking-wider block font-mono">Disfarce Rodado</span>
+                        <span className="text-[9px] uppercase font-bold text-emerald-800 tracking-wider block font-mono">Trecho Rodado</span>
                         <p className="text-lg font-bold text-emerald-950 font-mono leading-none mt-0.5">+{trip.kmDriven} km</p>
                       </div>
                     )}

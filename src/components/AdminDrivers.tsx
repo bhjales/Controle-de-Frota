@@ -11,7 +11,8 @@ import {
   UserCheck, 
   Fingerprint, 
   AlertCircle, 
-  Sparkles 
+  Sparkles,
+  Edit
 } from 'lucide-react';
 import { User, Vehicle, Equipment, UserRole } from '../types';
 import { FleetStore } from '../store/fleetStore';
@@ -27,6 +28,93 @@ interface AdminDriversProps {
 export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments }: AdminDriversProps) {
   const [search, setSearch] = useState('');
   const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
+
+  // User edit modal states
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editLoginId, setEditLoginId] = useState('');
+  const [editCpf, setEditCpf] = useState('');
+  const [editLicense, setEditLicense] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState<UserRole>('driver');
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+
+  const startEditingUser = (user: User) => {
+    setEditingUser(user);
+    setEditName(user.name);
+    setEditLoginId(user.loginId || '');
+    setEditCpf(user.cpf);
+    setEditLicense(user.licenseNumber || '');
+    setEditEmail(user.email || '');
+    setEditPassword(user.password || '');
+    setEditRole(user.role);
+    setEditError('');
+    setEditSuccess('');
+  };
+
+  const handleUpdateUserSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    setEditError('');
+    setEditSuccess('');
+
+    const formattedLoginId = editLoginId.trim().toLowerCase();
+
+    if (!formattedLoginId || !editName.trim() || !editCpf.trim()) {
+      setEditError('Por favor, preencha todos os campos obrigatórios (*).');
+      return;
+    }
+
+    if (!/^[a-z0-9._-]+$/.test(formattedLoginId)) {
+      setEditError('O Login de Acesso deve conter apenas letras minúsculas, números, pontos (.), hífens (-) ou sublinhados (_).');
+      return;
+    }
+
+    const cpfClean = editCpf.replace(/\D/g, '');
+    if (cpfClean.length !== 11) {
+      setEditError('O CPF deve conter 11 dígitos numéricos.');
+      return;
+    }
+
+    let finalLicense = editLicense.trim();
+    if (editRole === 'driver') {
+      if (!finalLicense) {
+        setEditError('O número de CNH é obrigatório para motoristas.');
+        return;
+      }
+      const cnhClean = finalLicense.replace(/\D/g, '');
+      if (cnhClean.length < 9 || cnhClean.length > 11) {
+        setEditError('O número de CNH é inválido. Digite entre 9 e 11 dígitos numéricos.');
+        return;
+      }
+    } else {
+      if (!finalLicense) {
+        finalLicense = 'Não Aplicável';
+      }
+    }
+
+    const res = store.updateUserDetails(editingUser.id, {
+      name: editName,
+      loginId: formattedLoginId,
+      cpf: editCpf,
+      licenseNumber: finalLicense,
+      email: editEmail,
+      password: editPassword,
+      role: editRole,
+    });
+
+    if (res.success) {
+      setEditSuccess('Cadastro e senha atualizados com sucesso!');
+      setTimeout(() => {
+        setEditingUser(null);
+      }, 1500);
+    } else {
+      setEditError(res.message);
+    }
+  };
 
   const handleAuthorize = (driverId: string, assetIds: string[]) => {
     const res = store.authorizeAssetsToDriver(driverId, assetIds);
@@ -580,59 +668,232 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                 </div>
 
                 {/* Footer Controls */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-3 border-t border-slate-100 gap-2">
-                  {/* Status Toggle Box */}
-                  <button
-                    onClick={() => handleToggleStatus(driver.id, driver.name, driver.isActive)}
-                    disabled={isSelf}
-                    className={`w-full sm:w-auto justify-center text-xs font-semibold px-2.5 py-1.5 rounded-lg border flex items-center gap-1 transition-all cursor-pointer ${
-                      !driver.isActive
-                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-250 animate-pulse'
-                        : 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 disabled:opacity-30 disabled:pointer-events-none'
-                    }`}
-                  >
-                    {driver.isActive ? (
-                      <>
-                        <Ban className="w-3.5 h-3.5" />
-                        Suspender Acesso
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        Reativar Motorista
-                      </>
-                    )}
-                  </button>
-
-                  {/* Inline Role Selector Dropdown */}
-                  <div className="w-full sm:w-auto justify-center flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 focus-within:ring-1 focus-within:ring-blue-500">
-                    <Shield className="w-3.5 h-3.5 text-slate-400" />
-                    <select
-                      value={driver.role}
-                      disabled={isSelf}
-                      onChange={(e) => {
-                        const newRole = e.target.value as UserRole;
-                        const res = store.changeDriverRole(driver.id, newRole);
-                        if (!res.success) {
-                          alert(res.message);
-                        }
-                      }}
-                      className="w-full sm:w-auto text-xs font-bold bg-transparent text-slate-700 outline-none cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-sans"
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  {/* Top Row: Primary User Operations */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => startEditingUser(driver)}
+                      className="w-full justify-center text-xs font-bold px-3 py-2 rounded-xl border bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
                     >
-                      <option value="driver">Motorista</option>
-                      <option value="gerencial">Gerencial</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                      <Edit className="w-3.5 h-3.5" />
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => setEditingDriverId(driver.id)}
+                      className="w-full justify-center text-xs font-bold px-3 py-2 rounded-xl border bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                      Permissões
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setEditingDriverId(driver.id)}
-                    className="w-full sm:w-auto justify-center text-xs font-bold px-2.5 py-1.5 rounded-lg border bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Key className="w-3.5 h-3.5" />
-                    Permissões
-                  </button>
+
+                  {/* Bottom Row: Access Management Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Role selector dropdown */}
+                    <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 focus-within:ring-1 focus-within:ring-blue-500">
+                      <Shield className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <select
+                        value={driver.role}
+                        disabled={isSelf}
+                        onChange={(e) => {
+                          const newRole = e.target.value as UserRole;
+                          const res = store.changeDriverRole(driver.id, newRole);
+                          if (!res.success) {
+                            alert(res.message);
+                          }
+                        }}
+                        className="w-full text-xs font-bold bg-transparent text-slate-700 outline-none cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-sans"
+                      >
+                        <option value="driver">Motorista</option>
+                        <option value="gerencial">Gerencial</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+
+                    {/* Suspend or Reactivate button */}
+                    <button
+                      onClick={() => handleToggleStatus(driver.id, driver.name, driver.isActive)}
+                      disabled={isSelf}
+                      className={`w-full justify-center text-xs font-semibold px-2.5 py-2 rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                        !driver.isActive
+                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-250 animate-pulse'
+                          : 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 disabled:opacity-30 disabled:pointer-events-none'
+                      }`}
+                    >
+                      {driver.isActive ? (
+                        <>
+                          <Ban className="w-3.5 h-3.5" />
+                          Suspender
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          Reativar
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
                 
+                {editingUser && editingUser.id === driver.id && (
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+                    <form 
+                      onSubmit={handleUpdateUserSubmit}
+                      className="bg-white border border-slate-200 rounded-3xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4 shadow-xl"
+                    >
+                      <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                        <h3 className="font-bold text-slate-950 text-base flex items-center gap-2">
+                          <Edit className="w-4 h-4 text-blue-600" />
+                          Editar Cadastro: {editingUser.name}
+                        </h3>
+                        <button 
+                          type="button" 
+                          onClick={() => setEditingUser(null)} 
+                          className="text-slate-400 hover:text-slate-600 rounded-lg p-1"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="space-y-4 text-slate-900 font-medium text-xs">
+                        {/* Name */}
+                        <div className="space-y-1">
+                          <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                            Nome Completo *
+                          </label>
+                          <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="w-full text-sm px-3.5 py-2 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-semibold"
+                            required
+                          />
+                        </div>
+
+                        {/* Login ID and Password in a grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                              Login de Acesso *
+                            </label>
+                            <input
+                              type="text"
+                              value={editLoginId}
+                              onChange={(e) => setEditLoginId(e.target.value)}
+                              className="w-full text-sm px-3.5 py-2 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-mono font-bold text-blue-900"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                              Senha de Acesso *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Redefinir senha"
+                              value={editPassword}
+                              onChange={(e) => setEditPassword(e.target.value)}
+                              className="w-full text-sm px-3.5 py-2 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-mono font-bold text-blue-900"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        {/* CPF and CNH in a grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                              CPF *
+                            </label>
+                            <input
+                              type="text"
+                              value={editCpf}
+                              onChange={(e) => setEditCpf(e.target.value)}
+                              className="w-full text-sm px-3.5 py-2 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-mono font-bold"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                              CNH {editRole === 'driver' ? '*' : '(Opcional)'}
+                            </label>
+                            <input
+                              type="text"
+                              value={editLicense}
+                              onChange={(e) => setEditLicense(e.target.value)}
+                              className="w-full text-sm px-3.5 py-2 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-mono font-bold"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Email and Role in a grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                              E-mail (Opcional)
+                            </label>
+                            <input
+                              type="email"
+                              value={editEmail}
+                              onChange={(e) => setEditEmail(e.target.value)}
+                              className="w-full text-sm px-3.5 py-2 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-sans"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                              Nível de Cargo / Função
+                            </label>
+                            <select
+                              value={editRole}
+                              disabled={currentUser?.id === editingUser.id}
+                              onChange={(e) => setEditRole(e.target.value as UserRole)}
+                              className="w-full text-sm bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-3.5 py-2 outline-none transition-all font-bold text-slate-700"
+                            >
+                              <option value="driver">Motorista</option>
+                              <option value="gerencial">Gerencial</option>
+                              <option value="admin">Administrador</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {editError && (
+                          <div className="bg-red-50 border border-red-150 p-3 rounded-xl text-xs font-semibold text-red-650 flex items-center gap-1">
+                            <AlertCircle className="w-4 h-4 text-red-550 shrink-0" />
+                            {editError}
+                          </div>
+                        )}
+
+                        {editSuccess && (
+                          <div className="bg-emerald-50 border border-emerald-250 p-3 rounded-xl text-xs font-semibold text-emerald-800 flex items-center gap-1.5 animate-fade-in">
+                            <Sparkles className="w-4 h-4 text-emerald-600 animate-spin" />
+                            {editSuccess}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setEditingUser(null)}
+                          className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl shadow-xs text-xs transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Salvar Alterações
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
                 {editingDriverId === driver.id && (
                   <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto space-y-4">

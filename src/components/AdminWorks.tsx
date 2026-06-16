@@ -150,20 +150,74 @@ export function AdminWorks({
 
   // Helper to find currently allocated vehicles
   const getAllocatedVehicles = (workId: string) => {
+    const assignedVehicles = vehicles.filter(v => v.workId === workId);
     const activeTripsForWork = trips.filter(t => t.status === 'active' && t.workId === workId);
-    return activeTripsForWork.map(t => {
-      const veh = vehicles.find(v => v.id === t.vehicleId);
-      return veh ? `${veh.brand} ${veh.model} (${veh.plate}) - Motorista: ${t.driverName}` : `Veículo (${t.vehicleModelPlate})`;
+    const matchedVehIds = new Set(assignedVehicles.map(v => v.id));
+    
+    const list: string[] = [];
+    
+    assignedVehicles.forEach(v => {
+      const activeTrip = trips.find(t => t.status === 'active' && t.vehicleId === v.id);
+      if (activeTrip) {
+        list.push(`${v.brand} ${v.model} (${v.plate}) - Em Viagem (Motorista: ${activeTrip.driverName})`);
+      } else {
+        const statusMap: Record<string, string> = {
+          available: 'Disponível',
+          maintenance: 'Em Manutenção',
+          in_use: 'Em Uso'
+        };
+        list.push(`${v.brand} ${v.model} (${v.plate}) - ${statusMap[v.status] || v.status}`);
+      }
     });
+
+    activeTripsForWork.forEach(t => {
+      if (!matchedVehIds.has(t.vehicleId)) {
+        const veh = vehicles.find(v => v.id === t.vehicleId);
+        if (veh) {
+          list.push(`${veh.brand} ${veh.model} (${veh.plate}) - Viagem Ativa (Motorista: ${t.driverName})`);
+        } else {
+          list.push(`Veículo (${t.vehicleModelPlate}) - Viagem Ativa (Motorista: ${t.driverName})`);
+        }
+      }
+    });
+
+    return list;
   };
 
   // Helper to find currently allocated machinery
   const getAllocatedEquipments = (workId: string) => {
+    const assignedEquipments = equipments.filter(e => e.workId === workId);
     const activeUsagesForWork = equipmentUsages.filter(u => u.status === 'active' && u.workId === workId);
-    return activeUsagesForWork.map(u => {
-      const eq = equipments.find(e => e.id === u.equipmentId);
-      return eq ? `${eq.name} (${eq.id}) - Operador: ${u.operatorName}` : `Máquina (${u.equipmentNameModel})`;
+    const matchedEqIds = new Set(assignedEquipments.map(e => e.id));
+    
+    const list: string[] = [];
+    
+    assignedEquipments.forEach(eq => {
+      const activeUsage = equipmentUsages.find(u => u.status === 'active' && u.equipmentId === eq.id);
+      if (activeUsage) {
+        list.push(`${eq.brand || eq.name} ${eq.model} (${eq.id}) - Em Operação (Operador: ${activeUsage.operatorName})`);
+      } else {
+        const statusMap: Record<string, string> = {
+          available: 'Disponível',
+          maintenance: 'Em Manutenção',
+          in_use: 'Em Operação'
+        };
+        list.push(`${eq.brand || eq.name} ${eq.model} (${eq.id}) - ${statusMap[eq.status] || eq.status}`);
+      }
     });
+
+    activeUsagesForWork.forEach(u => {
+      if (!matchedEqIds.has(u.equipmentId)) {
+        const eq = equipments.find(e => e.id === u.equipmentId);
+        if (eq) {
+          list.push(`${eq.brand || eq.name} ${eq.model} (${eq.id}) - Uso Ativo (Operador: ${u.operatorName})`);
+        } else {
+          list.push(`Máquina (${u.equipmentNameModel}) - Uso Ativo (Operador: ${u.operatorName})`);
+        }
+      }
+    });
+
+    return list;
   };
 
   // List filter logic
