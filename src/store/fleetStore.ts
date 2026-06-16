@@ -129,6 +129,7 @@ export class FleetStore {
         equipmentUsages,
         works,
         equipmentTypes,
+        vehicleCategories,
         maintenanceLogs
       ] = await Promise.all([
         fetchTable('users'),
@@ -138,12 +139,14 @@ export class FleetStore {
         fetchTable('equipment_usages'),
         fetchTable('construction_works'),
         fetchTable('equipment_types'),
+        fetchTable('vehicle_categories'),
         fetchTable('maintenance_logs')
       ]);
 
       if (users && users.length > 0) this.users = users as User[];
       if (works && works.length > 0) this.works = works as ConstructionWork[];
       if (equipmentTypes && equipmentTypes.length > 0) this.equipmentTypes = equipmentTypes as EquipmentType[];
+      if (vehicleCategories && vehicleCategories.length > 0) this.vehicleCategories = vehicleCategories as VehicleCategory[];
       if (trips && trips.length > 0) this.trips = trips as Trip[];
       if (equipmentUsages && equipmentUsages.length > 0) this.equipmentUsages = equipmentUsages as EquipmentUsage[];
       
@@ -270,16 +273,34 @@ export class FleetStore {
       }
 
       if (error) {
+        const isSchemaWarning = error.message && (
+          error.message.includes('schema cache') || 
+          error.message.includes('relation') || 
+          error.message.includes('does not exist') ||
+          error.message.includes('column')
+        );
+
         // If it's a "Failed to fetch" (network/offline error), log as warning instead of console.error to keep the app functional
         if (error.message && error.message.includes('Failed to fetch')) {
           console.warn(`[Supabase Offline/Blocked] Failed to sync ${table} - local changes are fully preserved locally.`);
+        } else if (isSchemaWarning) {
+          console.warn(`[Supabase Schema Out of Sync] Table '${table}' could not be synced: ${error.message}. Please run the contents of 'supabase-schema.sql' in your Supabase SQL Editor to make sure all tables exist.`);
         } else {
           console.error(`Error syncing ${table}:`, error.message);
         }
       }
     } catch (e: any) {
+      const isSchemaWarning = e && e.message && (
+        e.message.includes('schema cache') || 
+        e.message.includes('relation') || 
+        e.message.includes('does not exist') ||
+        e.message.includes('column')
+      );
+
       if (e && e.message && e.message.includes('Failed to fetch')) {
         console.warn(`[Supabase Offline/Blocked] Exception syncing ${table} - connection unavailable.`);
+      } else if (isSchemaWarning) {
+        console.warn(`[Supabase Schema Out of Sync Exception] Table '${table}' exception during sync: ${e.message}. Please verify Supabase setup.`);
       } else {
         console.error(`Exception syncing ${table}:`, e);
       }
@@ -313,6 +334,7 @@ export class FleetStore {
       await this.syncTable('users', this.users);
       await this.syncTable('construction_works', this.works);
       await this.syncTable('equipment_types', this.equipmentTypes);
+      await this.syncTable('vehicle_categories', this.vehicleCategories);
 
       // 2. Sync independent assets (referencing construction_works optionally)
       await this.syncTable('vehicles', this.vehicles);
@@ -1239,6 +1261,9 @@ export class FleetStore {
   public deleteEquipmentType(id: string): { success: boolean, message: string } {
     this.equipmentTypes = this.equipmentTypes.filter(t => t.id !== id);
     this.saveState();
+    supabase.from('equipment_types').delete().eq('id', id).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for equipment_type:', error);
+    });
     return { success: true, message: 'Tipo removido.' };
   }
 
@@ -1256,6 +1281,9 @@ export class FleetStore {
   public deleteVehicleCategory(id: string): { success: boolean, message: string } {
     this.vehicleCategories = this.vehicleCategories.filter(c => c.id !== id);
     this.saveState();
+    supabase.from('vehicle_categories').delete().eq('id', id).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for vehicle_category:', error);
+    });
     return { success: true, message: 'Categoria de veículo removida.' };
   }
 
