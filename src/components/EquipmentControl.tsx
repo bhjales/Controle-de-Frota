@@ -15,7 +15,8 @@ import {
   AlertCircle, 
   Sparkles, 
   Check,
-  X
+  X,
+  Pencil
 } from 'lucide-react';
 import { Equipment, EquipmentUsage, User as UserType, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
@@ -38,6 +39,7 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
   const [searchEquipment, setSearchEquipment] = useState('');
 
   // Admin states for registering a new heavy machine
+  const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(null);
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
@@ -125,6 +127,35 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
     (u) => u.operatorId === currentUser.id && u.status === 'active'
   );
 
+  const handleStartEdit = (eq: Equipment) => {
+    setEditingEquipment(eq);
+    setId(eq.id);
+    setName(eq.name);
+    setBrand(eq.brand);
+    setModel(eq.model);
+    setYear(eq.year);
+    setType(eq.type);
+    setInitialHours(eq.currentHours);
+    setAdminWorkId(eq.workId || '');
+    setAdminError('');
+    setAdminSuccess('');
+    setShowAddForm(true);
+  };
+
+  const handleCancelForm = () => {
+    setShowAddForm(false);
+    setEditingEquipment(null);
+    setId('');
+    setName('');
+    setBrand('');
+    setModel('');
+    setYear(new Date().getFullYear());
+    setInitialHours(0);
+    setAdminWorkId('');
+    setAdminError('');
+    setAdminSuccess('');
+  };
+
   // Handle equipment registration
   const handleRegisterEquipment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,30 +170,51 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
     const formattedId = id.trim().toUpperCase();
     const matchedWork = adminWorkId ? works.find(w => w.id === adminWorkId) : undefined;
 
-    const res = store.addEquipment({
-      id: formattedId,
-      name: name.trim(),
-      brand: brand.trim(),
-      model: model.trim(),
-      year: year,
-      type: type,
-      currentHours: Number(initialHours) || 0,
-      workId: matchedWork?.id,
-      workName: matchedWork?.name
-    });
+    if (editingEquipment) {
+      const updatedEquipment: Equipment = {
+        ...editingEquipment,
+        id: formattedId,
+        name: name.trim(),
+        brand: brand.trim(),
+        model: model.trim(),
+        year: year,
+        type: type,
+        currentHours: Number(initialHours) || 0,
+        workId: matchedWork?.id,
+        workName: matchedWork?.name
+      };
 
-    if (res.success) {
-      setAdminSuccess(res.message);
-      setId('');
-      setName('');
-      setBrand('');
-      setModel('');
-      setYear(new Date().getFullYear());
-      setInitialHours(0);
-      setAdminWorkId('');
-      setTimeout(() => setAdminSuccess(''), 4000);
+      store.updateEquipment(updatedEquipment);
+      setAdminSuccess('Equipamento atualizado com sucesso!');
+      setTimeout(() => {
+        handleCancelForm();
+      }, 1500);
     } else {
-      setAdminError(res.message);
+      const res = store.addEquipment({
+        id: formattedId,
+        name: name.trim(),
+        brand: brand.trim(),
+        model: model.trim(),
+        year: year,
+        type: type,
+        currentHours: Number(initialHours) || 0,
+        workId: matchedWork?.id,
+        workName: matchedWork?.name
+      });
+
+      if (res.success) {
+        setAdminSuccess(res.message);
+        setId('');
+        setName('');
+        setBrand('');
+        setModel('');
+        setYear(new Date().getFullYear());
+        setInitialHours(0);
+        setAdminWorkId('');
+        setTimeout(() => setAdminSuccess(''), 4000);
+      } else {
+        setAdminError(res.message);
+      }
     }
   };
 
@@ -1243,14 +1295,22 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
           {/* Header trigger Form */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200">
             <div>
-              <h3 className="text-base font-bold text-slate-900 font-display">Cadastrar Novo Maquinário</h3>
-              <p className="text-xs text-slate-500">Insira escavadeiras, geradores móveis e caminhões de elevação que possuem horímetros.</p>
+              <h3 className="text-base font-bold text-slate-900 font-display">
+                {editingEquipment ? 'Editar Maquinário' : 'Cadastrar Novo Maquinário'}
+              </h3>
+              <p className="text-xs text-slate-500">
+                {editingEquipment ? 'Modifique os detalhes, horímetros e alocação do equipamento selecionado.' : 'Insira escavadeiras, geradores móveis e caminhões de elevação que possuem horímetros.'}
+              </p>
             </div>
             <button
               onClick={() => {
-                setShowAddForm(!showAddForm);
-                setAdminError('');
-                setAdminSuccess('');
+                if (showAddForm) {
+                  handleCancelForm();
+                } else {
+                  setShowAddForm(true);
+                  setAdminError('');
+                  setAdminSuccess('');
+                }
               }}
               className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all active:scale-95 cursor-pointer shadow-sm"
             >
@@ -1267,7 +1327,7 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
             >
               <h3 className="font-bold text-slate-950 text-md flex items-center gap-2 border-b border-slate-100 pb-3 font-display">
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-600 block animate-pulse"></span>
-                Novo Maquinário Pesado da Garagem
+                {editingEquipment ? `Editar Detalhes do Maquinário: ${editingEquipment.id}` : 'Novo Maquinário Pesado da Garagem'}
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1401,13 +1461,22 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                 </div>
               )}
 
-              <div className="flex justify-end pt-3">
+              <div className="flex justify-end gap-2 pt-3">
+                {editingEquipment && (
+                  <button
+                    type="button"
+                    onClick={handleCancelForm}
+                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                )}
                 <button
                   type="submit"
                   className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-4 h-4" />
-                  Confirmar Cadastro de Maquinário
+                  {editingEquipment ? 'Salvar Alterações' : 'Confirmar Cadastro de Maquinário'}
                 </button>
               </div>
             </form>
@@ -1549,6 +1618,14 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                     } disabled:opacity-30 disabled:pointer-events-none cursor-pointer`}
                   >
                     {mach.status === 'maintenance' ? 'Liberar da Manutenção' : 'Enviar p/ Manutenção'}
+                  </button>
+
+                  <button
+                    onClick={() => handleStartEdit(mach)}
+                    className="p-2 bg-[#EEF2FF] hover:bg-blue-50 border border-transparent hover:border-blue-200 text-slate-450 hover:text-blue-600 rounded-xl transition-all cursor-pointer"
+                    title="Editar Maquinário"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-blue-600" />
                   </button>
 
                   <button

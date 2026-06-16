@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle, Pencil } from 'lucide-react';
 import { Vehicle, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
 
@@ -15,6 +15,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   
   // Registration Form state
   const [showForm, setShowForm] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [plate, setPlate] = useState('');
@@ -25,6 +26,36 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [selectedWorkId, setSelectedWorkId] = useState('');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+
+  const handleStartEdit = (vehicle: Vehicle) => {
+    setEditingVehicle(vehicle);
+    setBrand(vehicle.brand);
+    setModel(vehicle.model);
+    setPlate(vehicle.plate);
+    setYear(vehicle.year);
+    setColor(vehicle.color);
+    setInitialKm(vehicle.currentKm);
+    setCategory(vehicle.category || 'utilitário');
+    setSelectedWorkId(vehicle.workId || '');
+    setFormError('');
+    setFormSuccess('');
+    setShowForm(true);
+  };
+
+  const handleCancelForm = () => {
+    setShowForm(false);
+    setEditingVehicle(null);
+    setBrand('');
+    setModel('');
+    setPlate('');
+    setYear(new Date().getFullYear());
+    setColor('');
+    setInitialKm(0);
+    setCategory('utilitário');
+    setSelectedWorkId('');
+    setFormError('');
+    setFormSuccess('');
+  };
 
   const handleRegisterVehicles = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,42 +80,64 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     }
 
     if (initialKm < 0) {
-      setFormError('A quilometragem inicial não pode ser negativo.');
+      setFormError('A quilometragem não pode ser negativa.');
       return;
     }
 
     const matchedWork = selectedWorkId ? works.find(w => w.id === selectedWorkId) : undefined;
-    const result = store.addVehicle({
-      brand: brand.trim(),
-      model: model.trim(),
-      plate: plate.trim().toUpperCase(),
-      year: Number(year),
-      color: color.trim(),
-      currentKm: Number(initialKm),
-      workId: matchedWork?.id,
-      workName: matchedWork?.name,
-      category: category
-    });
 
-    if (result.success) {
-      setFormSuccess(result.message);
-      // reset form
-      setBrand('');
-      setModel('');
-      setPlate('');
-      setYear(new Date().getFullYear());
-      setColor('');
-      setInitialKm(0);
-      setCategory('utilitário');
-      setSelectedWorkId('');
+    if (editingVehicle) {
+      const updatedVehicle: Vehicle = {
+        ...editingVehicle,
+        brand: brand.trim(),
+        model: model.trim(),
+        plate: plate.trim().toUpperCase(),
+        year: Number(year),
+        color: color.trim(),
+        currentKm: Number(initialKm),
+        workId: matchedWork?.id,
+        workName: matchedWork?.name,
+        category: category
+      };
       
-      // Auto close form after briefly showing success
+      store.updateVehicle(updatedVehicle);
+      setFormSuccess('Veículo atualizado com sucesso!');
       setTimeout(() => {
-        setShowForm(false);
-        setFormSuccess('');
+        handleCancelForm();
       }, 1500);
     } else {
-      setFormError(result.message);
+      const result = store.addVehicle({
+        brand: brand.trim(),
+        model: model.trim(),
+        plate: plate.trim().toUpperCase(),
+        year: Number(year),
+        color: color.trim(),
+        currentKm: Number(initialKm),
+        workId: matchedWork?.id,
+        workName: matchedWork?.name,
+        category: category
+      });
+
+      if (result.success) {
+        setFormSuccess(result.message);
+        // reset form
+        setBrand('');
+        setModel('');
+        setPlate('');
+        setYear(new Date().getFullYear());
+        setColor('');
+        setInitialKm(0);
+        setCategory('utilitário');
+        setSelectedWorkId('');
+        
+        // Auto close form after briefly showing success
+        setTimeout(() => {
+          setShowForm(false);
+          setFormSuccess('');
+        }, 1500);
+      } else {
+        setFormError(result.message);
+      }
     }
   };
 
@@ -211,7 +264,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         >
           <h3 className="font-bold text-slate-900 text-md flex items-center gap-2 border-b border-slate-100 pb-3 font-display">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600 block animate-pulse"></span>
-            Cadastrar Novo Carro na Frota
+            {editingVehicle ? `Editar Veículo: ${editingVehicle.brand} ${editingVehicle.model}` : 'Cadastrar Novo Carro na Frota'}
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -299,11 +352,11 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
             </div>
 
             <div className="md:col-span-3">
-              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Alocação de Obra Inicial *</label>
+              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Alocação de Obra *</label>
               <select
                 value={selectedWorkId}
                 onChange={(e) => setSelectedWorkId(e.target.value)}
-                className="w-full text-sm bg-[#F8FAFC] focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-2.5 outline-none transition-all font-semibold"
+                className="w-full text-sm bg-[#F8FAFC] focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-2.5 outline-none transition-all font-bold"
               >
                 <option value="">⚙️ Geral (Sem alocação única)</option>
                 {works.filter(w => w.status === 'active').map(w => (
@@ -332,16 +385,16 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"
-              onClick={() => setShowForm(false)}
-              className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all"
+              onClick={handleCancelForm}
+              className="px-4 py-2 text-sm text-slate-605 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-sm bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all"
+              className="px-5 py-2 text-sm bg-slate-905 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all cursor-pointer"
             >
-              Confirmar Cadastro
+              {editingVehicle ? 'Salvar Alterações' : 'Confirmar Cadastro'}
             </button>
           </div>
         </form>
@@ -540,9 +593,18 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                   </div>
 
                   <button
+                    onClick={() => handleStartEdit(vehicle)}
+                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-transparent hover:border-blue-100 cursor-pointer flex items-center justify-center"
+                    title="Editar veículo"
+                  >
+                    <Pencil className="w-4 h-4 text-slate-400 hover:text-blue-600 transition-colors" />
+                    <span className="sm:hidden text-xs font-semibold ml-1.5 font-sans font-medium">Editar Veículo</span>
+                  </button>
+
+                  <button
                     onClick={() => handleDeleteVehicle(vehicle.id, vehicle.plate)}
                     disabled={vehicle.status === 'in_use'}
-                    className="p-2 text-slate-400 hover:text-red-00 disabled:opacity-30 disabled:pointer-events-none hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 cursor-pointer flex items-center justify-center"
+                    className="p-2 text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:pointer-events-none hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 cursor-pointer flex items-center justify-center"
                     title="Excluir veículo"
                   >
                     <Trash2 className="w-4 h-4 text-slate-400 hover:text-red-600 transition-colors" />

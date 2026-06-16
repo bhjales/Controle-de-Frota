@@ -12,7 +12,9 @@ import {
   Truck,
   Wrench,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Edit,
+  Pencil
 } from 'lucide-react';
 import { User, ConstructionWork, Vehicle, Equipment, Trip, EquipmentUsage } from '../types';
 
@@ -26,6 +28,7 @@ interface AdminWorksProps {
   onCreateWork: (name: string, city: string, state: string, description?: string) => { success: boolean, message: string };
   onToggleWorkStatus: (workId: string) => { success: boolean, message: string };
   onDeleteWork: (workId: string) => { success: boolean, message: string };
+  onUpdateWork: (work: ConstructionWork) => { success: boolean, message: string };
 }
 
 export function AdminWorks({
@@ -37,12 +40,14 @@ export function AdminWorks({
   equipmentUsages,
   onCreateWork,
   onToggleWorkStatus,
-  onDeleteWork
+  onDeleteWork,
+  onUpdateWork
 }: AdminWorksProps) {
   const [name, setName] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [description, setDescription] = useState('');
+  const [editingWork, setEditingWork] = useState<ConstructionWork | null>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
@@ -51,6 +56,26 @@ export function AdminWorks({
   const [errorMsg, setErrorMsg] = useState('');
 
   const isAdmin = currentUser?.role === 'admin';
+
+  const handleStartEdit = (work: ConstructionWork) => {
+    setEditingWork(work);
+    setName(work.name);
+    setCity(work.city);
+    setState(work.state);
+    setDescription(work.description || '');
+    setSuccessMsg('');
+    setErrorMsg('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingWork(null);
+    setName('');
+    setCity('');
+    setState('');
+    setDescription('');
+    setSuccessMsg('');
+    setErrorMsg('');
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,16 +92,34 @@ export function AdminWorks({
       return;
     }
 
-    const res = onCreateWork(name, city, state, description);
-    if (res.success) {
-      setSuccessMsg(res.message);
-      setName('');
-      setCity('');
-      setState('');
-      setDescription('');
-      setTimeout(() => setSuccessMsg(''), 4000);
+    if (editingWork) {
+      const updated: ConstructionWork = {
+        ...editingWork,
+        name: name.trim(),
+        city: city.trim(),
+        state: state.trim().toUpperCase(),
+        description: description.trim()
+      };
+      const res = onUpdateWork(updated);
+      if (res.success) {
+        setSuccessMsg(res.message);
+        handleCancelEdit();
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } else {
+        setErrorMsg(res.message);
+      }
     } else {
-      setErrorMsg(res.message);
+      const res = onCreateWork(name, city, state, description);
+      if (res.success) {
+        setSuccessMsg(res.message);
+        setName('');
+        setCity('');
+        setState('');
+        setDescription('');
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } else {
+        setErrorMsg(res.message);
+      }
     }
   };
 
@@ -181,7 +224,7 @@ export function AdminWorks({
           <div className="lg:col-span-1 space-y-6">
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs">
               <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 font-mono">
-                Registrar Nova Obra
+                {editingWork ? 'Editar Detalhes da Obra' : 'Registrar Nova Obra'}
               </h3>
               
               <form onSubmit={handleSubmit} className="space-y-4 font-sans text-xs">
@@ -242,13 +285,25 @@ export function AdminWorks({
                   />
                 </div>
 
-                <button
-                  id="submit_obra_btn"
-                  type="submit"
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-blue-600/10"
-                >
-                  <Plus className="w-4 h-4" /> Cadastrar Obra
-                </button>
+                <div className="flex flex-col gap-2 pt-2">
+                  <button
+                    id="submit_obra_btn"
+                    type="submit"
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-blue-600/10"
+                  >
+                    {editingWork ? <Edit className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                    {editingWork ? 'Salvar Alterações' : 'Cadastrar Obra'}
+                  </button>
+                  {editingWork && (
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-605 font-bold rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all text-xs"
+                    >
+                      Cancelar Edição
+                    </button>
+                  )}
+                </div>
               </form>
             </div>
           </div>
@@ -370,6 +425,16 @@ export function AdminWorks({
                               title={work.status === 'active' ? 'Marcar como Concluída' : 'Marcar como Ativa'}
                             >
                               {work.status === 'active' ? 'Concluir' : 'Ativar'}
+                            </button>
+
+                            <button
+                              id={`edit_work_${work.id}`}
+                              type="button"
+                              onClick={() => handleStartEdit(work)}
+                              className="p-2 bg-blue-50 hover:bg-blue-100/80 border border-blue-200 text-blue-600 rounded-lg transition-all cursor-pointer"
+                              title="Editar detalhes da obra"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
                             </button>
 
                             <button

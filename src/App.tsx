@@ -489,6 +489,7 @@ export default function App() {
                 onCreateWork={(name, city, state, description) => store.createWork(name, city, state, description)}
                 onToggleWorkStatus={(id) => store.toggleWorkStatus(id)}
                 onDeleteWork={(id) => store.deleteWork(id)}
+                onUpdateWork={(work) => store.updateWork(work)}
               />
             )}
 

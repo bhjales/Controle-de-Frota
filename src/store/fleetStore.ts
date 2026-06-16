@@ -1352,6 +1352,29 @@ export class FleetStore {
     return { success: true, message: 'Obra cadastrada com sucesso!' };
   }
 
+  public updateWork(updatedWork: ConstructionWork): { success: boolean, message: string } {
+    if (!updatedWork.name.trim() || !updatedWork.city.trim() || !updatedWork.state.trim()) {
+      return { success: false, message: 'Nome, município e estado são obrigatórios.' };
+    }
+    const index = this.works.findIndex(w => w.id === updatedWork.id);
+    if (index === -1) return { success: false, message: 'Obra não encontrada.' };
+
+    this.works = this.works.map(w => w.id === updatedWork.id ? {
+      ...w,
+      name: updatedWork.name.trim(),
+      city: updatedWork.city.trim(),
+      state: updatedWork.state.trim().toUpperCase(),
+      description: updatedWork.description?.trim()
+    } : w);
+
+    // If name changed, sync allocation workName in vehicles and equipments
+    this.vehicles = this.vehicles.map(v => v.workId === updatedWork.id ? { ...v, workName: updatedWork.name.trim() } : v);
+    this.equipments = this.equipments.map(e => e.workId === updatedWork.id ? { ...e, workName: updatedWork.name.trim() } : e);
+
+    this.saveState();
+    return { success: true, message: 'Obra atualizada com sucesso!' };
+  }
+
   public toggleWorkStatus(workId: string): { success: boolean, message: string } {
     const work = this.works.find(w => w.id === workId);
     if (!work) return { success: false, message: 'Obra não encontrada.' };
