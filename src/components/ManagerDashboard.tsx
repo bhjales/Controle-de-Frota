@@ -358,7 +358,7 @@ export function ManagerDashboard({
           drawDecorations(data.pageNumber);
         }
       },
-      margin: { top: 22, bottom: 20, left: 12, right: 12 }
+      margin: { top: 25, bottom: 20, left: 12, right: 12 }
     });
 
     doc.save('relatorio_gerencial_manutencoes.pdf');
@@ -460,7 +460,7 @@ export function ManagerDashboard({
           drawDecorations(data.pageNumber);
         }
       },
-      margin: { left: 12, right: 12 }
+      margin: { top: 25, left: 12, right: 12 }
     });
 
     // Equipment analysis
@@ -516,7 +516,7 @@ export function ManagerDashboard({
             drawDecorations(data.pageNumber);
           }
         },
-        margin: { left: 12, right: 12, bottom: 20 }
+        margin: { top: 25, left: 12, right: 12, bottom: 20 }
       });
     } else {
       doc.addPage();
@@ -548,7 +548,7 @@ export function ManagerDashboard({
             drawDecorations(data.pageNumber);
           }
         },
-        margin: { left: 12, right: 12, bottom: 20 }
+        margin: { top: 25, left: 12, right: 12, bottom: 20 }
       });
     }
 
@@ -651,7 +651,7 @@ export function ManagerDashboard({
           drawDecorations(data.pageNumber);
         }
       },
-      margin: { left: 12, right: 12 }
+      margin: { top: 25, left: 12, right: 12 }
     });
 
     // Machine usages analysis
@@ -709,7 +709,7 @@ export function ManagerDashboard({
             drawDecorations(data.pageNumber);
           }
         },
-        margin: { left: 12, right: 12, bottom: 20 }
+        margin: { top: 25, left: 12, right: 12, bottom: 20 }
       });
     } else {
       doc.addPage();
@@ -741,7 +741,7 @@ export function ManagerDashboard({
             drawDecorations(data.pageNumber);
           }
         },
-        margin: { left: 12, right: 12, bottom: 20 }
+        margin: { top: 25, left: 12, right: 12, bottom: 20 }
       });
     }
 
@@ -910,7 +910,7 @@ export function ManagerDashboard({
         theme: 'plain',
         tableLineColor: [204, 251, 241],
         tableLineWidth: 1,
-        margin: { left: 12, right: 12 },
+        margin: { top: 25, left: 12, right: 12 },
         didDrawPage: (data) => {
           if (data.pageNumber > 1) {
             drawDecorations(data.pageNumber);
@@ -940,7 +940,7 @@ export function ManagerDashboard({
         alternateRowStyles: {
           fillColor: [254, 242, 242]
         },
-        margin: { left: 12, right: 12 },
+        margin: { top: 25, left: 12, right: 12 },
         didDrawPage: (data) => {
           if (data.pageNumber > 1) {
             drawDecorations(data.pageNumber);
@@ -987,7 +987,7 @@ export function ManagerDashboard({
       alternateRowStyles: {
         fillColor: [248, 250, 252]
       },
-      margin: { left: 12, right: 12 },
+      margin: { top: 25, left: 12, right: 12 },
       didDrawPage: (data) => {
         if (data.pageNumber > 1) {
           drawDecorations(data.pageNumber);
@@ -1040,7 +1040,7 @@ export function ManagerDashboard({
             drawDecorations(data.pageNumber);
           }
         },
-        margin: { left: 12, right: 12, bottom: 20 }
+        margin: { top: 25, left: 12, right: 12, bottom: 20 }
       });
     } else {
       doc.addPage();
@@ -1080,7 +1080,7 @@ export function ManagerDashboard({
             drawDecorations(data.pageNumber);
           }
         },
-        margin: { left: 12, right: 12, bottom: 20 }
+        margin: { top: 25, left: 12, right: 12, bottom: 20 }
       });
     }
 
