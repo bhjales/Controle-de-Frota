@@ -19,10 +19,12 @@ import {
   Construction,
   Car,
   Download,
-  FileText
+  FileText,
+  Filter
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { User, Vehicle, Equipment, Trip, EquipmentUsage, ConstructionWork } from '../types';
+import { FleetStore } from '../store/fleetStore';
 
 interface ManagerDashboardProps {
   currentUser: User | null;
@@ -36,22 +38,93 @@ interface ManagerDashboardProps {
 
 export function ManagerDashboard({
   currentUser,
-  vehicles,
-  equipments,
-  trips,
-  equipmentUsages,
+  vehicles: rawVehicles,
+  equipments: rawEquipments,
+  trips: rawTrips,
+  equipmentUsages: rawEquipmentUsages,
   users,
-  works
+  works: inputWorks
 }: ManagerDashboardProps) {
+
+  const store = FleetStore.getInstance();
+  const works = inputWorks || store.works;
+
+  // --- FILTER STATES ---
+  const [filterAssetType, setFilterAssetType] = React.useState('all'); // 'all', 'vehicles', 'equipments'
+  const [filterVehCategory, setFilterVehCategory] = React.useState('');
+  const [filterEqType, setFilterEqType] = React.useState('');
+  const [filterWorkId, setFilterWorkId] = React.useState('');
+  const [filterStatus, setFilterStatus] = React.useState('');
+  const [filterDateStart, setFilterDateStart] = React.useState('');
+  const [filterDateEnd, setFilterDateEnd] = React.useState('');
+  const [showFilters, setShowFilters] = React.useState(false);
+
+  const isWithinDateRange = (dateStr: string | undefined | null) => {
+    if (!dateStr) return true;
+    const d = new Date(dateStr).getTime();
+    if (filterDateStart && d < new Date(filterDateStart).getTime()) return false;
+    
+    if (filterDateEnd) {
+      const endD = new Date(filterDateEnd);
+      endD.setHours(23, 59, 59, 999);
+      if (d > endD.getTime()) return false;
+    }
+    
+    return true;
+  };
+
+  const vehicles = rawVehicles.filter(v => {
+    if (filterAssetType === 'equipments') return false;
+    if (filterVehCategory && v.category !== filterVehCategory) return false;
+    if (filterStatus && v.status !== filterStatus) return false;
+    if (filterWorkId && v.adminWorkId !== filterWorkId) return false;
+    return true;
+  });
+
+  const equipments = rawEquipments.filter(e => {
+    if (filterAssetType === 'vehicles') return false;
+    if (filterEqType && e.type !== filterEqType) return false;
+    if (filterStatus && e.status !== filterStatus) return false;
+    if (filterWorkId && e.adminWorkId !== filterWorkId) return false;
+    return true;
+  });
+
+  const trips = rawTrips.filter(t => {
+    if (!isWithinDateRange(t.startTime)) return false;
+    if (filterWorkId && t.workId !== filterWorkId) return false;
+    if (filterAssetType === 'equipments') return false;
+    if (filterVehCategory) {
+      const v = rawVehicles.find(vh => vh.id === t.vehicleId);
+      if (!v || v.category !== filterVehCategory) return false;
+    }
+    return true;
+  });
+
+  const equipmentUsages = rawEquipmentUsages.filter(u => {
+    if (!isWithinDateRange(u.startTime)) return false;
+    if (filterWorkId && u.workId !== filterWorkId) return false;
+    if (filterAssetType === 'vehicles') return false;
+    if (filterEqType) {
+      const eq = rawEquipments.find(e => e.id === u.equipmentId);
+      if (!eq || eq.type !== filterEqType) return false;
+    }
+    return true;
+  });
 
   // --- 1. MAINTENANCE COSTS COMPUTATIONS ---
   const vehicleMaintTotal = vehicles.reduce((sum, v) => {
-    const historySum = (v.maintenanceHistory || []).reduce((hSum, log) => hSum + (log.cost || 0), 0);
+    const historySum = (v.maintenanceHistory || []).reduce((hSum, log) => {
+      if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return hSum;
+      return hSum + (log.cost || 0);
+    }, 0);
     return sum + historySum;
   }, 0);
 
   const equipmentMaintTotal = equipments.reduce((sum, eq) => {
-    const historySum = (eq.maintenanceHistory || []).reduce((hSum, log) => hSum + (log.cost || 0), 0);
+    const historySum = (eq.maintenanceHistory || []).reduce((hSum, log) => {
+      if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return hSum;
+      return hSum + (log.cost || 0);
+    }, 0);
     return sum + historySum;
   }, 0);
 
@@ -73,6 +146,7 @@ export function ManagerDashboard({
 
   vehicles.forEach((v) => {
     (v.maintenanceHistory || []).forEach((log) => {
+      if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return;
       allMaintenanceEvents.push({
         id: log.id,
         itemName: `${v.brand} ${v.model} (${v.plate})`,
@@ -88,6 +162,7 @@ export function ManagerDashboard({
 
   equipments.forEach((e) => {
     (e.maintenanceHistory || []).forEach((log) => {
+      if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return;
       allMaintenanceEvents.push({
         id: log.id,
         itemName: `${e.name} (${e.brand} ${e.model})`,
@@ -1102,17 +1177,118 @@ export function ManagerDashboard({
             Bem-vindo, <strong className="text-slate-800">{currentUser?.name || 'Gestor'}</strong>. Abaixo está o demonstrativo consolidado de custos, frotas, equipes e maquinários.
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200/60 px-4 py-2.5 rounded-2xl shrink-0 self-start md:self-auto text-left">
-          <span className="flex h-2.5 w-2.5 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-          </span>
-          <div>
-            <span className="block text-[8px] font-sans font-bold uppercase text-amber-805 tracking-wider font-mono">Modo de Acesso</span>
-            <span className="text-xs font-bold text-amber-950">Apenas Leitura & Monitoramento</span>
+        <div className="flex items-center gap-4 self-start md:self-auto">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all border ${showFilters ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <Filter className="w-4 h-4" />
+            Filtros Avançados
+          </button>
+          
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200/60 px-4 py-2.5 rounded-2xl shrink-0 text-left hidden sm:flex">
+            <span className="flex h-2.5 w-2.5 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+            </span>
+            <div>
+              <span className="block text-[8px] font-sans font-bold uppercase text-amber-805 tracking-wider font-mono">Modo de Acesso</span>
+              <span className="text-xs font-bold text-amber-950">Apenas Leitura</span>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* FILTERS PANEL */}
+      {showFilters && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm animate-fade-in text-left space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2 font-display">
+              <Filter className="w-4 h-4 text-blue-600" />
+              Critérios de Filtragem de Dados
+            </h3>
+            <button 
+              onClick={() => {
+                setFilterAssetType('all');
+                setFilterVehCategory('');
+                setFilterEqType('');
+                setFilterWorkId('');
+                setFilterStatus('');
+                setFilterDateStart('');
+                setFilterDateEnd('');
+              }}
+              className="text-[10px] text-blue-600 font-bold uppercase hover:underline"
+            >
+              Limpar Filtros
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase font-bold text-slate-500">Tipo de Ativo</label>
+              <select value={filterAssetType} onChange={(e) => setFilterAssetType(e.target.value)} className="w-full text-xs bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 outline-none">
+                <option value="all">Ambos (Veículos e Maquinários)</option>
+                <option value="vehicles">Apenas Veículos</option>
+                <option value="equipments">Apenas Maquinários</option>
+              </select>
+            </div>
+
+            {filterAssetType !== 'equipments' && (
+              <div className="space-y-1.5">
+                <label className="block text-[10px] uppercase font-bold text-slate-500">Categoria de Veículo</label>
+                <select value={filterVehCategory} onChange={(e) => setFilterVehCategory(e.target.value)} className="w-full text-xs bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 outline-none">
+                  <option value="">Todas</option>
+                  {store.vehicleCategories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {filterAssetType !== 'vehicles' && (
+              <div className="space-y-1.5">
+                <label className="block text-[10px] uppercase font-bold text-slate-500">Tipo de Maquinário</label>
+                <select value={filterEqType} onChange={(e) => setFilterEqType(e.target.value)} className="w-full text-xs bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 outline-none">
+                  <option value="">Todos</option>
+                  {store.equipmentTypes.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase font-bold text-slate-500">Obra/Canteiro</label>
+              <select value={filterWorkId} onChange={(e) => setFilterWorkId(e.target.value)} className="w-full text-xs bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 outline-none">
+                <option value="">Todas as Obras</option>
+                {works.map(w => (
+                  <option key={w.id} value={w.id}>{w.name} ({w.city})</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase font-bold text-slate-500">Status Operacional</label>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full text-xs bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 outline-none">
+                <option value="">Todos</option>
+                <option value="available">Disponível</option>
+                <option value="in_use">Em Uso</option>
+                <option value="maintenance">Em Manutenção</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase font-bold text-slate-500">Data Inicial (Manutenções/Viagens)</label>
+              <input type="date" value={filterDateStart} onChange={(e) => setFilterDateStart(e.target.value)} className="w-full text-xs bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 outline-none" />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase font-bold text-slate-500">Data Final (Manutenções/Viagens)</label>
+              <input type="date" value={filterDateEnd} onChange={(e) => setFilterDateEnd(e.target.value)} className="w-full text-xs bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 rounded-xl px-3 py-2 outline-none" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 📥 Central de Exportação de Relatórios */}
       <div id="management_reports_exporter_panel" className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md border border-slate-800 text-left relative overflow-hidden">
