@@ -45,7 +45,7 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [type, setType] = useState('Retroescavadeira'); // Default
+  const [type, setType] = useState(''); // Default
   const [initialHours, setInitialHours] = useState<number>(0);
   const [adminWorkId, setAdminWorkId] = useState('');
   const [adminError, setAdminError] = useState('');
@@ -150,6 +150,7 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
     setBrand('');
     setModel('');
     setYear(new Date().getFullYear());
+    setType('');
     setInitialHours(0);
     setAdminWorkId('');
     setAdminError('');
@@ -1405,12 +1406,10 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                     className="w-full text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-2.5 outline-none transition-all font-semibold"
                     required
                   >
-                    <option value="Retroescavadeira">🚜 Retroescavadeira</option>
-                    <option value="Caminhão Munck">🚛 Caminhão Munck</option>
-                    <option value="Bobcat / Pá Carregadeira">🚜 Bobcat / Carregadeira</option>
-                    <option value="Trator Agrícola / Trabalho">🚜 Trator</option>
-                    <option value="Gerador Estacionário">⚙️ Gerador</option>
-                    <option value="Outro Maquinário">⚙️ Outro Maquinário</option>
+                    <option value="" disabled>Selecione um tipo de maquinário</option>
+                    {store.equipmentTypes.map(t => (
+                      <option key={t.id} value={t.name}>{t.name}</option>
+                    ))}
                   </select>
                 </div>
 
