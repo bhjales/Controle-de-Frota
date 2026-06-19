@@ -691,6 +691,9 @@ export class FleetStore {
 
     this.vehicles = this.vehicles.filter(v => v.id !== vehicleId);
     this.saveState();
+    supabase.from('vehicles').delete().eq('id', vehicleId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for vehicle:', error);
+    });
     return { success: true, message: 'Veículo excluído com sucesso.' };
   }
 
@@ -927,6 +930,9 @@ export class FleetStore {
 
     this.trips = this.trips.filter(t => t.id !== tripId);
     this.saveState();
+    supabase.from('trips').delete().eq('id', tripId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for trip:', error);
+    });
     return { success: true, message: 'Viagem excluída do histórico.' };
   }
 
@@ -1043,6 +1049,9 @@ export class FleetStore {
 
     this.equipments = this.equipments.filter(e => e.id !== equipmentId);
     this.saveState();
+    supabase.from('equipments').delete().eq('id', equipmentId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for equipment:', error);
+    });
     return { success: true, message: 'Equipamento excluído com sucesso.' };
   }
 
@@ -1148,6 +1157,9 @@ export class FleetStore {
 
     this.equipmentUsages = this.equipmentUsages.filter(u => u.id !== usageId);
     this.saveState();
+    supabase.from('equipment_usages').delete().eq('id', usageId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for equipment_usage:', error);
+    });
     return { success: true, message: 'Registro removido do histórico.' };
   }
 
@@ -1244,6 +1256,9 @@ export class FleetStore {
 
     this.works = this.works.filter(w => w.id !== workId);
     this.saveState();
+    supabase.from('construction_works').delete().eq('id', workId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for construction_works:', error);
+    });
     return { success: true, message: 'Obra excluída do sistema com sucesso.' };
   }
 
