@@ -77,7 +77,7 @@ export function ManagerDashboard({
     if (filterAssetType === 'equipments') return false;
     if (filterVehCategory && v.category !== filterVehCategory) return false;
     if (filterStatus && v.status !== filterStatus) return false;
-    if (filterWorkId && v.adminWorkId !== filterWorkId) return false;
+    if (filterWorkId && v.workId !== filterWorkId) return false;
     return true;
   });
 
@@ -85,7 +85,7 @@ export function ManagerDashboard({
     if (filterAssetType === 'vehicles') return false;
     if (filterEqType && e.type !== filterEqType) return false;
     if (filterStatus && e.status !== filterStatus) return false;
-    if (filterWorkId && e.adminWorkId !== filterWorkId) return false;
+    if (filterWorkId && e.workId !== filterWorkId) return false;
     return true;
   });
 
@@ -253,11 +253,17 @@ export function ManagerDashboard({
       const allocatedVehicles = vehicles.filter(v => v.workId === w.id);
       const maintenanceCost =
         vehicles.reduce((total, v) =>
-          total + (v.maintenanceHistory || []).reduce((s, log) => log.workId === w.id ? s + (log.cost || 0) : s, 0),
+          total + (v.maintenanceHistory || []).reduce((s, log) => {
+            if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return s;
+            return log.workId === w.id ? s + (log.cost || 0) : s;
+          }, 0),
           0
         ) +
         equipments.reduce((total, e) =>
-          total + (e.maintenanceHistory || []).reduce((s, log) => log.workId === w.id ? s + (log.cost || 0) : s, 0),
+          total + (e.maintenanceHistory || []).reduce((s, log) => {
+            if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return s;
+            return log.workId === w.id ? s + (log.cost || 0) : s;
+          }, 0),
           0
         );
 
@@ -275,11 +281,17 @@ export function ManagerDashboard({
       const generalVehicles = vehicles.filter(v => !v.workId);
       const maintenanceCost =
         vehicles.reduce((total, v) =>
-          total + (v.maintenanceHistory || []).reduce((s, log) => (!log.workId || log.workId === 'geral') ? s + (log.cost || 0) : s, 0),
+          total + (v.maintenanceHistory || []).reduce((s, log) => {
+            if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return s;
+            return (!log.workId || log.workId === 'geral') ? s + (log.cost || 0) : s;
+          }, 0),
           0
         ) +
         equipments.reduce((total, e) =>
-          total + (e.maintenanceHistory || []).reduce((s, log) => (!log.workId || log.workId === 'geral') ? s + (log.cost || 0) : s, 0),
+          total + (e.maintenanceHistory || []).reduce((s, log) => {
+            if (!isWithinDateRange(log.resolvedAt || log.sentAt)) return s;
+            return (!log.workId || log.workId === 'geral') ? s + (log.cost || 0) : s;
+          }, 0),
           0
         );
 
@@ -293,7 +305,10 @@ export function ManagerDashboard({
         maintenanceCost
       };
     })()
-  ].filter(group => group.id === 'geral' || group.status === 'active' || group.vehicles.length > 0 || group.maintenanceCost > 0);
+  ].filter(group => {
+    if (filterWorkId && group.id !== filterWorkId) return false;
+    return group.id === 'geral' || group.status === 'active' || group.vehicles.length > 0 || group.maintenanceCost > 0;
+  });
 
   // Calculate maximum cost amongst Obras for ratio bar display
   const maxMaintCostAcrossObras = Math.max(...groupingData.map(g => g.maintenanceCost), 1);
