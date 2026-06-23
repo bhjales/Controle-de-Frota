@@ -112,12 +112,12 @@ export class FleetStore {
           const { data, error } = await supabase.from(tableName).select('*');
           if (error) {
             console.warn(`Error loading table '${tableName}' from Supabase:`, error.message);
-            return [];
+            return null; // Return null on error so we don't overwrite with empty
           }
-          return data || [];
+          return data || []; // Return empty array on success if no data
         } catch (e: any) {
           console.warn(`Exception loading table '${tableName}' from Supabase:`, e?.message || e);
-          return [];
+          return null; // Return null on error
         }
       };
 
@@ -143,30 +143,35 @@ export class FleetStore {
         fetchTable('maintenance_logs')
       ]);
 
-      if (users && users.length > 0) this.users = users as User[];
-      if (works && works.length > 0) this.works = works as ConstructionWork[];
-      if (equipmentTypes && equipmentTypes.length > 0) this.equipmentTypes = equipmentTypes as EquipmentType[];
-      if (vehicleCategories && vehicleCategories.length > 0) this.vehicleCategories = vehicleCategories as VehicleCategory[];
-      if (trips && trips.length > 0) this.trips = trips as Trip[];
-      if (equipmentUsages && equipmentUsages.length > 0) this.equipmentUsages = equipmentUsages as EquipmentUsage[];
+      if (users !== null) this.users = users as User[];
+      if (works !== null) this.works = works as ConstructionWork[];
+      if (equipmentTypes !== null) this.equipmentTypes = equipmentTypes as EquipmentType[];
+      if (vehicleCategories !== null) this.vehicleCategories = vehicleCategories as VehicleCategory[];
+      if (trips !== null) this.trips = trips as Trip[];
+      if (equipmentUsages !== null) this.equipmentUsages = equipmentUsages as EquipmentUsage[];
       
-      const vData = (vehicles || []) as Vehicle[];
-      const eData = (equipments || []) as Equipment[];
-      const mLogs = (maintenanceLogs || []) as any[];
+      const vData = vehicles as Vehicle[] | null;
+      const eData = equipments as Equipment[] | null;
+      const mLogs = maintenanceLogs as any[] | null;
 
       // Re-attach maintenance logs
-      if (mLogs.length > 0) {
-        vData.forEach(v => {
-          v.maintenanceHistory = mLogs.filter(log => log.assetId === v.id && log.assetType === 'vehicle');
-        });
-        eData.forEach(e => {
-          e.maintenanceHistory = mLogs.filter(log => log.assetId === e.id && log.assetType === 'equipment');
-        });
+      if (mLogs !== null) {
+        if (vData !== null) {
+          vData.forEach(v => {
+            v.maintenanceHistory = mLogs.filter(log => log.assetId === v.id && log.assetType === 'vehicle');
+          });
+        }
+        if (eData !== null) {
+          eData.forEach(e => {
+            e.maintenanceHistory = mLogs.filter(log => log.assetId === e.id && log.assetType === 'equipment');
+          });
+        }
       }
 
-      if (vData.length > 0) this.vehicles = vData;
-      if (eData.length > 0) this.equipments = eData;
+      if (vData !== null) this.vehicles = vData;
+      if (eData !== null) this.equipments = eData;
       
+      this.persistLocalState();
       this.triggerListeners();
     } catch (error) {
       console.warn("Exception during overall Supabase state loader:", error);
@@ -354,6 +359,14 @@ export class FleetStore {
   private constructor() {
     this.loadState();
     this.loadFromSupabase();
+
+    // Listen to changes from other tabs to prevent state skew and re-inserting deleted items
+    window.addEventListener('storage', (e) => {
+      if (e.key && e.key.startsWith('ff_')) {
+        this.loadState();
+        this.triggerListeners();
+      }
+    });
   }
 
   public static getInstance(): FleetStore {
@@ -425,7 +438,7 @@ export class FleetStore {
     }
   }
 
-  private saveState() {
+  private persistLocalState() {
     saveToStorage<User[]>('ff_users', this.users);
     saveToStorage<Vehicle[]>('ff_vehicles', this.vehicles);
     saveToStorage<Trip[]>('ff_trips', this.trips);
@@ -435,6 +448,10 @@ export class FleetStore {
     saveToStorage<EquipmentType[]>('ff_equipment_types', this.equipmentTypes);
     saveToStorage<VehicleCategory[]>('ff_vehicle_categories', this.vehicleCategories);
     saveToStorage<User | null>('ff_current_user', this.currentUser);
+  }
+
+  private saveState() {
+    this.persistLocalState();
     this.triggerListeners();
     this.backgroundSync();
   }
