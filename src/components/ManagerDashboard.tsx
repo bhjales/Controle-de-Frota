@@ -23,7 +23,6 @@ import {
   Filter
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { BrazilIlluminatedMap } from './BrazilIlluminatedMap';
 import { User, Vehicle, Equipment, Trip, EquipmentUsage, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
 
@@ -60,10 +59,6 @@ export function ManagerDashboard({
   const [filterDateEnd, setFilterDateEnd] = React.useState('');
   const [showFilters, setShowFilters] = React.useState(false);
 
-  // Map filters
-  const [mapStateFilter, setMapStateFilter] = React.useState<string | null>(null);
-  const [mapCityFilter, setMapCityFilter] = React.useState<string | null>(null);
-
   const isWithinDateRange = (dateStr: string | undefined | null) => {
     if (!dateStr) return true;
     const d = new Date(dateStr).getTime();
@@ -78,19 +73,11 @@ export function ManagerDashboard({
     return true;
   };
 
-  const mapFilteredWorks = works.filter(w => {
-     if (mapStateFilter && w.state.toUpperCase() !== mapStateFilter.toUpperCase()) return false;
-     if (mapCityFilter && w.city.toLowerCase() !== mapCityFilter.toLowerCase()) return false;
-     return true;
-  });
-  const validWorkIds = new Set(mapFilteredWorks.map(w => w.id));
-
   const vehicles = rawVehicles.filter(v => {
     if (filterAssetType === 'equipments') return false;
     if (filterVehCategory && v.category !== filterVehCategory) return false;
     if (filterStatus && v.status !== filterStatus) return false;
     if (filterWorkId && v.adminWorkId !== filterWorkId) return false;
-    if ((mapStateFilter || mapCityFilter) && !validWorkIds.has(v.adminWorkId || '')) return false;
     return true;
   });
 
@@ -99,7 +86,6 @@ export function ManagerDashboard({
     if (filterEqType && e.type !== filterEqType) return false;
     if (filterStatus && e.status !== filterStatus) return false;
     if (filterWorkId && e.adminWorkId !== filterWorkId) return false;
-    if ((mapStateFilter || mapCityFilter) && !validWorkIds.has(e.adminWorkId || '')) return false;
     return true;
   });
 
@@ -107,7 +93,6 @@ export function ManagerDashboard({
     if (!isWithinDateRange(t.startTime)) return false;
     if (filterWorkId && t.workId !== filterWorkId) return false;
     if (filterAssetType === 'equipments') return false;
-    if ((mapStateFilter || mapCityFilter) && !validWorkIds.has(t.workId || '')) return false;
     if (filterVehCategory) {
       const v = rawVehicles.find(vh => vh.id === t.vehicleId);
       if (!v || v.category !== filterVehCategory) return false;
@@ -119,7 +104,6 @@ export function ManagerDashboard({
     if (!isWithinDateRange(u.startTime)) return false;
     if (filterWorkId && u.workId !== filterWorkId) return false;
     if (filterAssetType === 'vehicles') return false;
-    if ((mapStateFilter || mapCityFilter) && !validWorkIds.has(u.workId || '')) return false;
     if (filterEqType) {
       const eq = rawEquipments.find(e => e.id === u.equipmentId);
       if (!eq || eq.type !== filterEqType) return false;
@@ -1213,16 +1197,6 @@ export function ManagerDashboard({
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="w-full">
-         <BrazilIlluminatedMap 
-            works={works} 
-            vehicles={rawVehicles} 
-            equipments={rawEquipments} 
-            onStateSelect={setMapStateFilter}
-            onCitySelect={setMapCityFilter}
-         />
       </div>
 
       {/* FILTERS PANEL */}
