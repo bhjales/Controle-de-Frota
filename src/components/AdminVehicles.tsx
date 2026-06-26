@@ -590,7 +590,13 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                     ) : (
                       <span className="text-[10px] w-full text-slate-450 font-mono flex items-center justify-center sm:justify-start gap-1.5 bg-slate-50 px-2.5 py-2 rounded border border-slate-100">
                         <PenTool className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                        Em trânsito com motorista
+                        Em trânsito com {
+                          (() => {
+                            const activeTrip = store.trips.find(t => t.vehicleId === vehicle.id && t.status === 'active');
+                            const driver = activeTrip ? store.users.find(u => u.id === activeTrip.driverId) : null;
+                            return driver ? driver.name : 'motorista';
+                          })()
+                        }
                       </span>
                     )}
                   </div>
