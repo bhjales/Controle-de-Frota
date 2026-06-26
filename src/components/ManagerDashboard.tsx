@@ -500,8 +500,14 @@ export function ManagerDashboard({
     doc.text(`Gerado por: ${currentUser?.name || 'Gestor'} | Total Veículos: ${vehTotal} | Total Máquinas Pesadas: ${eqTotal}`, 12, 31);
 
     // Tables of vehicles
+    const sortedVehicles = [...vehicles].sort((a, b) => {
+      const workA = a.workName || 'Garagem Central';
+      const workB = b.workName || 'Garagem Central';
+      return workA.localeCompare(workB);
+    });
+
     const vehRows: any[] = [];
-    vehicles.forEach(v => {
+    sortedVehicles.forEach(v => {
       const nextMaint = (v.lastMaintenanceKm && v.maintenanceIntervalKm) ? (v.lastMaintenanceKm + v.maintenanceIntervalKm) : null;
       const nextMaintLabel = nextMaint ? `${nextMaint} KM` : 'Não config.';
       const nextOilLabel = v.nextOilChangeKm ? `${v.nextOilChangeKm} KM` : 'Não config.';
@@ -525,7 +531,7 @@ export function ManagerDashboard({
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     doc.setTextColor(30, 41, 59);
-    doc.text('1. Veículos e Utilitários de Logística', 12, 40);
+    doc.text('1. Veículos e Utilitários de Logística (Agrupados por Obra)', 12, 40);
 
     autoTable(doc, {
       startY: 44,
@@ -541,6 +547,9 @@ export function ManagerDashboard({
         fontSize: 7.5,
         cellPadding: 2.5,
         font: 'helvetica'
+      },
+      columnStyles: {
+        5: { minCellWidth: 18, cellWidth: 'wrap' } // KM ATUAL
       },
       alternateRowStyles: {
         fillColor: [248, 250, 252]
