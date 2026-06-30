@@ -73,9 +73,14 @@ const INITIAL_EQUIPMENT_USAGES: EquipmentUsage[] = [];
 
 // Helper to load typed JSON from localstorage
 function loadFromStorage<T>(key: string, defaultValue: T): T {
-  const data = localStorage.getItem(key);
-  if (!data) return defaultValue;
+  // Disable caching for large objects to prevent mobile crashes (QuotaExceeded)
+  if (key !== 'ff_current_user') {
+    return defaultValue;
+  }
+
   try {
+    const data = localStorage.getItem(key);
+    if (!data) return defaultValue;
     return JSON.parse(data) as T;
   } catch (e) {
     return defaultValue;
@@ -86,7 +91,16 @@ const INITIAL_WORKS: ConstructionWork[] = [];
 
 // Helper to save serializable JSON is safe
 function saveToStorage<T>(key: string, data: T): void {
-  localStorage.setItem(key, JSON.stringify(data));
+  // Disable caching for large objects to prevent mobile crashes
+  if (key !== 'ff_current_user') {
+    return;
+  }
+  
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn("Storage write failed (possibly quota exceeded):", e);
+  }
 }
 
 export class FleetStore {

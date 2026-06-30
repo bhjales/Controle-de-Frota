@@ -1,5 +1,13 @@
 -- Script SQL para gerar as tabelas e a estrutura de dados inicial no Supabase
 
+-- Criar a tabela de migrações nativa do Supabase para evitar erros no Dashboard (opcional, mas recomendado)
+CREATE SCHEMA IF NOT EXISTS supabase_migrations;
+CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
+    version text NOT NULL PRIMARY KEY,
+    statements text[],
+    name text
+);
+
 -- Drop tables if they exist to recreate the structure
 DROP TABLE IF EXISTS public.equipment_usages CASCADE;
 DROP TABLE IF EXISTS public.trips CASCADE;
