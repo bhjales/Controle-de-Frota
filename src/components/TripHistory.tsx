@@ -30,7 +30,7 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
     return true; // Admin views all records
   });
 
-  // Filter based on search input
+  // Filter based on search input and sort by date descending
   const filteredTrips = accessibleTrips.filter(t => {
     const query = search.toLowerCase();
     return (
@@ -39,7 +39,7 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
       t.checkIn.destination.toLowerCase().includes(query) ||
       t.checkIn.reason.toLowerCase().includes(query)
     );
-  });
+  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // --- STATS ACCUMULATORS ---
   const completedTrips = accessibleTrips.filter(t => t.status === 'completed');
