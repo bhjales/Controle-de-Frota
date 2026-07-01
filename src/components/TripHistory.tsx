@@ -202,6 +202,13 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="col-span-2 space-y-0.5">
+                          <span className="text-slate-400 block font-semibold text-[10px] uppercase">Data / Horário de Início</span>
+                          <p className="text-slate-850 font-bold flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-emerald-500" />
+                            {new Date(trip.createdAt).toLocaleDateString('pt-BR')} às {new Date(trip.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
                         <div className="space-y-0.5">
                           <span className="text-slate-400 block font-semibold text-[10px] uppercase">Quilometragem Inicial</span>
                           <p className="font-mono text-slate-800 font-bold flex items-center gap-1">
@@ -291,6 +298,18 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                               <p className="text-slate-850 font-bold flex items-center gap-1.5">
                                 <Calendar className="w-3.5 h-3.5 text-indigo-500" />
                                 {new Date(trip.checkOut.time).toLocaleDateString('pt-BR')} às {new Date(trip.checkOut.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <div className="col-span-2 space-y-0.5">
+                              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Tempo de Viagem</span>
+                              <p className="text-slate-850 font-bold flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                                {(() => {
+                                  const ms = new Date(trip.checkOut.time).getTime() - new Date(trip.createdAt).getTime();
+                                  const h = Math.floor(ms / (1000 * 60 * 60));
+                                  const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+                                  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+                                })()}
                               </p>
                             </div>
                           </div>
