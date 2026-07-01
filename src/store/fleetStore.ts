@@ -103,8 +103,45 @@ export class FleetStore {
   public vehicleCategories: VehicleCategory[] = [];
   public currentUser: User | null = null;
 
+  // Snapshot for differential syncing
+  private previousState: Record<string, string> = {};
+
   // Listeners list for component re-renders
   private listeners: (() => void)[] = [];
+
+  private updatePreviousState() {
+    this.previousState = {
+      users: JSON.stringify(this.users),
+      vehicles: JSON.stringify(this.vehicles),
+      trips: JSON.stringify(this.trips),
+      equipments: JSON.stringify(this.equipments),
+      equipmentUsages: JSON.stringify(this.equipmentUsages),
+      works: JSON.stringify(this.works),
+      equipmentTypes: JSON.stringify(this.equipmentTypes),
+      vehicleCategories: JSON.stringify(this.vehicleCategories),
+    };
+  }
+
+  private getChangedItems(tableName: string, currentArray: any[]) {
+    const prevStateStr = this.previousState[tableName];
+    if (!prevStateStr) return currentArray; // First time sync, push everything (shouldn't happen)
+    
+    try {
+      const prevArray = JSON.parse(prevStateStr) as any[];
+      const prevMap = new Map(prevArray.map(item => [item.id, JSON.stringify(item)]));
+      
+      const changed: any[] = [];
+      for (const item of currentArray) {
+        const itemStr = JSON.stringify(item);
+        if (prevMap.get(item.id) !== itemStr) {
+          changed.push(item);
+        }
+      }
+      return changed;
+    } catch (e) {
+      return currentArray; // Fallback to all if error
+    }
+  }
 
   private async loadFromSupabase() {
     try {
@@ -172,6 +209,7 @@ export class FleetStore {
       if (vData !== null) this.vehicles = vData;
       if (eData !== null) this.equipments = eData;
       
+      this.updatePreviousState();
       this.persistLocalState();
       this.triggerListeners();
     } catch (error) {
@@ -330,28 +368,44 @@ export class FleetStore {
       }
     });
     if (logs.length > 0) {
+      // Differential sync for maintenance_logs might be complex without a previousState key, 
+      // but let's just push everything as they are small, or use a pseudo changed logic
+      // For now, we will push all maintenance logs, they are usually rare.
       await this.syncTable('maintenance_logs', logs);
     }
   }
 
   private async backgroundSync() {
     try {
-      // 1. Sync baseline tables that have no foreign key dependencies in standard context
-      await this.syncTable('users', this.users);
-      await this.syncTable('construction_works', this.works);
-      await this.syncTable('equipment_types', this.equipmentTypes);
-      await this.syncTable('vehicle_categories', this.vehicleCategories);
+      // Find differences using getChangedItems
+      const cUsers = this.getChangedItems('users', this.users);
+      const cWorks = this.getChangedItems('works', this.works);
+      const cEqTypes = this.getChangedItems('equipmentTypes', this.equipmentTypes);
+      const cVehCats = this.getChangedItems('vehicleCategories', this.vehicleCategories);
+      
+      const cVehicles = this.getChangedItems('vehicles', this.vehicles);
+      const cEquipments = this.getChangedItems('equipments', this.equipments);
+      
+      const cTrips = this.getChangedItems('trips', this.trips);
+      const cUsages = this.getChangedItems('equipmentUsages', this.equipmentUsages);
 
-      // 2. Sync independent assets (referencing construction_works optionally)
-      await this.syncTable('vehicles', this.vehicles);
-      await this.syncTable('equipments', this.equipments);
+      // Sync only changed items
+      if (cUsers.length) await this.syncTable('users', cUsers);
+      if (cWorks.length) await this.syncTable('construction_works', cWorks);
+      if (cEqTypes.length) await this.syncTable('equipment_types', cEqTypes);
+      if (cVehCats.length) await this.syncTable('vehicle_categories', cVehCats);
 
-      // 3. Sync operational/checkout entries (referencing users, vehicles, equipments)
-      await this.syncTable('trips', this.trips);
-      await this.syncTable('equipment_usages', this.equipmentUsages);
+      if (cVehicles.length) await this.syncTable('vehicles', cVehicles);
+      if (cEquipments.length) await this.syncTable('equipments', cEquipments);
 
-      // 4. Sync maintenance logs
+      if (cTrips.length) await this.syncTable('trips', cTrips);
+      if (cUsages.length) await this.syncTable('equipment_usages', cUsages);
+
+      // Sync maintenance logs
       await this.syncMaintenanceLogs();
+
+      // Update the previous state snapshot after successful sync
+      this.updatePreviousState();
     } catch (e) {
       console.error("Exception in backgroundSync:", e);
     }
@@ -368,6 +422,18 @@ export class FleetStore {
         this.triggerListeners();
       }
     });
+
+    // Auto-refresh when the app comes back into focus
+    if (typeof window !== 'undefined') {
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.loadFromSupabase();
+        }
+      });
+      window.addEventListener('focus', () => {
+        this.loadFromSupabase();
+      });
+    }
   }
 
   public static getInstance(): FleetStore {
