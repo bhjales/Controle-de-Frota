@@ -1722,7 +1722,7 @@ export function ManagerDashboard({
           </div>
 
           {/* Core Operations highlights */}
-          <div className="bg-slate-50 border border-slate-150 rounded-2.5xl p-4 space-y-4 text-left">
+          <div className="bg-slate-50 border border-slate-150 rounded-2.5xl p-4 space-y-4 text-left h-[500px] flex flex-col">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-500 text-white rounded-xl">
@@ -1737,9 +1737,9 @@ export function ManagerDashboard({
 
             {/* List of active drivers */}
             {activeDriversCount > 0 && (
-              <div className="space-y-1">
+              <div className="space-y-1 h-[400px] flex flex-col">
                 <span className="text-[9px] uppercase font-bold text-slate-400">Motoristas em Viagem:</span>
-                <div className="max-h-24 overflow-y-auto space-y-1">
+                <div className="h-full overflow-y-auto space-y-1">
                   {trips.filter(t => t.status === 'active').map(trip => {
                     const driver = users.find(u => u.id === trip.driverId);
                     if (!driver) return null;
