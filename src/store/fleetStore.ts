@@ -209,45 +209,11 @@ export class FleetStore {
       if (vData !== null) this.vehicles = vData;
       if (eData !== null) this.equipments = eData;
       
-      this.verifyAssetStatuses();
-
       this.updatePreviousState();
       this.persistLocalState();
       this.triggerListeners();
     } catch (error) {
       console.warn("Exception during overall Supabase state loader:", error);
-    }
-  }
-
-  private async verifyAssetStatuses() {
-    let changedVehicles: any[] = [];
-    let changedEquipments: any[] = [];
-
-    this.vehicles.forEach(vehicle => {
-      if (vehicle.status === 'in_use') {
-        const hasActiveTrip = this.trips.some(t => t.vehicleId === vehicle.id && t.status === 'active');
-        if (!hasActiveTrip) {
-          vehicle.status = 'available';
-          changedVehicles.push(vehicle);
-        }
-      }
-    });
-
-    this.equipments.forEach(equipment => {
-      if (equipment.status === 'in_use') {
-        const hasActiveUsage = this.equipmentUsages.some(u => u.equipmentId === equipment.id && u.status === 'active');
-        if (!hasActiveUsage) {
-          equipment.status = 'available';
-          changedEquipments.push(equipment);
-        }
-      }
-    });
-
-    if (changedVehicles.length > 0) {
-      await this.syncTable('vehicles', changedVehicles);
-    }
-    if (changedEquipments.length > 0) {
-      await this.syncTable('equipments', changedEquipments);
     }
   }
 
