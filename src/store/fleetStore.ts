@@ -208,10 +208,39 @@ export class FleetStore {
 
       if (vData !== null) this.vehicles = vData;
       if (eData !== null) this.equipments = eData;
+
+      // Consistency check: ensure only assets in active trips/usages are marked as in_use
+      let needsSync = false;
+      
+      this.vehicles.forEach(v => {
+        const isInActiveTrip = this.trips.some(t => t.status === 'active' && t.vehicleId === v.id);
+        if (isInActiveTrip && v.status !== 'in_use') {
+          v.status = 'in_use';
+          needsSync = true;
+        } else if (!isInActiveTrip && v.status === 'in_use') {
+          v.status = 'available';
+          needsSync = true;
+        }
+      });
+      
+      this.equipments.forEach(e => {
+        const isInActiveUsage = this.equipmentUsages.some(u => u.status === 'active' && u.equipmentId === e.id);
+        if (isInActiveUsage && e.status !== 'in_use') {
+          e.status = 'in_use';
+          needsSync = true;
+        } else if (!isInActiveUsage && e.status === 'in_use') {
+          e.status = 'available';
+          needsSync = true;
+        }
+      });
       
       this.updatePreviousState();
       this.persistLocalState();
       this.triggerListeners();
+      
+      if (needsSync) {
+        this.backgroundSync();
+      }
     } catch (error) {
       console.warn("Exception during overall Supabase state loader:", error);
     }
