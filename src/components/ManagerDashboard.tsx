@@ -387,37 +387,43 @@ export function ManagerDashboard({
     const rows: any[] = [];
     vehicles.forEach(v => {
       (v.maintenanceHistory || []).forEach(log => {
+        const daysDiff = log.resolvedAt 
+          ? Math.max(0, Math.ceil((new Date(log.resolvedAt).getTime() - new Date(log.sentAt).getTime()) / (1000 * 3600 * 24)))
+          : Math.max(0, Math.ceil((new Date().getTime() - new Date(log.sentAt).getTime()) / (1000 * 3600 * 24)));
         rows.push([
-          log.id.toUpperCase().substring(0, 8),
           `${v.brand} ${v.model} (${v.plate})`,
           'Veículo',
           log.workName || 'Geral/Central',
           log.reason || 'Sinalizado preventiva',
           log.resolution || 'Concluída',
-          `R$ ${log.cost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-          log.resolvedAt ? new Date(log.resolvedAt).toLocaleDateString('pt-BR') : ''
+          `R$ ${(log.cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+          log.resolvedAt ? new Date(log.resolvedAt).toLocaleDateString('pt-BR') : '',
+          `${daysDiff}`
         ]);
       });
     });
 
     equipments.forEach(e => {
       (e.maintenanceHistory || []).forEach(log => {
+        const daysDiff = log.resolvedAt 
+          ? Math.max(0, Math.ceil((new Date(log.resolvedAt).getTime() - new Date(log.sentAt).getTime()) / (1000 * 3600 * 24)))
+          : Math.max(0, Math.ceil((new Date().getTime() - new Date(log.sentAt).getTime()) / (1000 * 3600 * 24)));
         rows.push([
-          log.id.toUpperCase().substring(0, 8),
           `${e.name} (${e.brand} ${e.model})`,
           'Equipamento',
           log.workName || 'Geral/Central',
           log.reason || 'Sinalizado preventiva',
           log.resolution || 'Concluída',
-          `R$ ${log.cost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-          log.resolvedAt ? new Date(log.resolvedAt).toLocaleDateString('pt-BR') : ''
+          `R$ ${(log.cost || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+          log.resolvedAt ? new Date(log.resolvedAt).toLocaleDateString('pt-BR') : '',
+          `${daysDiff}`
         ]);
       });
     });
 
     autoTable(doc, {
       startY: 66,
-      head: [['ID ATIVO', 'NOME / CATEGORIA DO REPARO', 'TIPO ATIVO', 'CANTEIRO', 'CHAMADO / MOTIVO', 'AÇÃO / RESOLUÇÃO TÉCNICA', 'CUSTO ATIVO', 'CONCLUÍDO']],
+      head: [['NOME / CATEGORIA DO REPARO', 'TIPO ATIVO', 'CANTEIRO', 'CHAMADO / MOTIVO', 'AÇÃO / RESOLUÇÃO TÉCNICA', 'CUSTO ATIVO', 'CONCLUÍDO', 'DIAS EM MANUT.']],
       body: rows,
       headStyles: {
         fillColor: [30, 41, 59],
@@ -431,14 +437,14 @@ export function ManagerDashboard({
         font: 'helvetica'
       },
       columnStyles: {
-        0: { cellWidth: 15 },
-        1: { cellWidth: 35 },
-        2: { cellWidth: 18 },
-        3: { cellWidth: 20 },
+        0: { cellWidth: 40 },
+        1: { cellWidth: 15 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 32 },
         4: { cellWidth: 32 },
-        5: { cellWidth: 32 },
-        6: { cellWidth: 18, halign: 'right' },
-        7: { cellWidth: 16 }
+        5: { cellWidth: 18, halign: 'right' },
+        6: { cellWidth: 15 },
+        7: { cellWidth: 14, halign: 'center' }
       },
       alternateRowStyles: {
         fillColor: [248, 250, 252]
