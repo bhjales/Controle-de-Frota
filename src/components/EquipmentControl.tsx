@@ -75,6 +75,8 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
   // Operator check-out states
   const [checkOutHours, setCheckOutHours] = useState<number | ''>('');
   const [checkoutObservations, setCheckoutObservations] = useState('');
+  const [refueled, setRefueled] = useState<boolean>(false);
+  const [fuelLiters, setFuelLiters] = useState<number | ''>('');
 
   // Camera handling
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -409,13 +411,17 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
     const res = store.checkOutEquipment(activeUsage.id, {
       hours: Number(checkOutHours),
       observations: checkoutObservations.trim() || 'Operação de maquinário concluída sem avarias detectadas.',
-      photo: photoToSave
+      photo: photoToSave,
+      refueled,
+      fuelLiters: refueled && fuelLiters !== '' ? Number(fuelLiters) : undefined
     });
 
     if (res.success) {
       setOpSuccess(res.message);
       setCheckOutHours('');
       setCheckoutObservations('');
+      setRefueled(false);
+      setFuelLiters('');
       setCapturedPhoto('');
       setTimeout(() => setOpSuccess(''), 5000);
     } else {
@@ -625,7 +631,52 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                    <div className="space-y-1.5 flex flex-col justify-center bg-[#F8FAFC] border border-slate-200 rounded-xl px-4 py-3">
+                      <label className="block text-xs font-bold text-slate-700 mb-2">
+                        Houve abastecimento durante o turno?
+                      </label>
+                      <div className="flex gap-4">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input 
+                            type="radio" 
+                            checked={refueled} 
+                            onChange={() => setRefueled(true)}
+                            className="text-amber-500 focus:ring-amber-500 cursor-pointer w-4 h-4"
+                          />
+                          <span className="text-sm font-semibold text-slate-600">Sim</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input 
+                            type="radio" 
+                            checked={!refueled} 
+                            onChange={() => { setRefueled(false); setFuelLiters(''); }}
+                            className="text-amber-500 focus:ring-amber-500 cursor-pointer w-4 h-4"
+                          />
+                          <span className="text-sm font-semibold text-slate-600">Não</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {refueled && (
+                      <div className="space-y-1.5 animate-in fade-in zoom-in-95 duration-200">
+                        <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                          Litragem de Combustível (L) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          placeholder="Ex: 50.5"
+                          value={fuelLiters}
+                          onChange={(e) => setFuelLiters(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                          className="w-full text-sm font-bold bg-[#F8FAFC] border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-amber-700"
+                          required={refueled}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 mt-4">
                     <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                       Observações de Encerramento (Nível de combustível, avarias registradas, etc.)
                     </label>
@@ -1258,6 +1309,12 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                           <div className="space-y-1 overflow-hidden leading-snug">
                             <p className="text-[10px] font-bold text-amber-600 font-mono">Horímetro Final: {row.checkOut.hours.toFixed(1)} h</p>
                             <p className="text-[11px] text-slate-650 font-bold">Consumo de Turno: <strong className="text-slate-800 font-bold">{(row.checkOut.hours - row.checkIn.hours).toFixed(1)} Horas</strong></p>
+                            {row.checkOut.refueled && (
+                              <p className="text-[10px] text-emerald-650 font-bold flex items-center gap-1 mt-0.5">
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                Abastecimento: <strong className="text-emerald-800">{row.checkOut.fuelLiters} L</strong>
+                              </p>
+                            )}
                             {row.checkOut.observations && (
                               <p className="text-[10px] text-slate-500 italic mt-0.5" title={row.checkOut.observations}>
                                 Obs: "{row.checkOut.observations}"

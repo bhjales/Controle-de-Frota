@@ -124,6 +124,8 @@ export interface EquipmentCheckOutDetails {
   observations: string;
   photo: string;
   time: string;
+  refueled?: boolean;
+  fuelLiters?: number;
 }
 
 export interface EquipmentUsage {

@@ -90,7 +90,7 @@ export function ManagerDashboard({
   });
 
   const trips = rawTrips.filter(t => {
-    if (!isWithinDateRange(t.startTime)) return false;
+    if (!isWithinDateRange(t.createdAt)) return false;
     if (filterWorkId && t.workId !== filterWorkId) return false;
     if (filterAssetType === 'equipments') return false;
     if (filterVehCategory) {
@@ -101,7 +101,7 @@ export function ManagerDashboard({
   });
 
   const equipmentUsages = rawEquipmentUsages.filter(u => {
-    if (!isWithinDateRange(u.startTime)) return false;
+    if (!isWithinDateRange(u.createdAt)) return false;
     if (filterWorkId && u.workId !== filterWorkId) return false;
     if (filterAssetType === 'vehicles') return false;
     if (filterEqType) {
@@ -1735,22 +1735,44 @@ export function ManagerDashboard({
               </div>
             </div>
 
-            {/* List of active drivers */}
-            {activeDriversCount > 0 && (
-              <div className="space-y-1 h-[400px] flex flex-col">
-                <span className="text-[9px] uppercase font-bold text-slate-400">Motoristas em Viagem:</span>
-                <div className="h-full overflow-y-auto space-y-1">
-                  {trips.filter(t => t.status === 'active').map(trip => {
-                    const driver = users.find(u => u.id === trip.driverId);
-                    if (!driver) return null;
-                    return (
-                      <div key={trip.id} className="text-[10px] font-bold text-slate-700 bg-white border border-slate-200 p-1.5 rounded-md flex justify-between">
-                        <span>{driver.name}</span>
-                        <span className="text-blue-600 font-mono">ID: {trip.id.substring(0, 4)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
+            {/* List of active drivers & operators */}
+            {(activeDriversCount > 0 || activeOperatorsCount > 0) && (
+              <div className="space-y-4 h-[400px] flex flex-col">
+                {activeDriversCount > 0 && (
+                  <div className="flex-1 overflow-hidden flex flex-col space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-slate-400 shrink-0">Motoristas em Viagem:</span>
+                    <div className="overflow-y-auto space-y-1">
+                      {trips.filter(t => t.status === 'active').map(trip => {
+                        const driver = users.find(u => u.id === trip.driverId);
+                        if (!driver) return null;
+                        return (
+                          <div key={trip.id} className="text-[10px] font-bold text-slate-700 bg-white border border-slate-200 p-1.5 rounded-md flex justify-between">
+                            <span>{driver.name}</span>
+                            <span className="text-blue-600 font-mono">ID: {trip.id.substring(0, 4)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                
+                {activeOperatorsCount > 0 && (
+                  <div className="flex-1 overflow-hidden flex flex-col space-y-1">
+                    <span className="text-[9px] uppercase font-bold text-slate-400 shrink-0">Operadores de Maquinário:</span>
+                    <div className="overflow-y-auto space-y-1">
+                      {equipmentUsages.filter(u => u.status === 'active').map(usage => {
+                        const operator = users.find(user => user.id === usage.operatorId);
+                        if (!operator) return null;
+                        return (
+                          <div key={usage.id} className="text-[10px] font-bold text-slate-700 bg-white border border-slate-200 p-1.5 rounded-md flex justify-between">
+                            <span>{operator.name}</span>
+                            <span className="text-amber-600 font-mono">ID: {usage.id.substring(0, 4)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
