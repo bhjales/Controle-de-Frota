@@ -1526,8 +1526,13 @@ export function ManagerDashboard({
               <LineChart data={lastSixMonths}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" fontSize={10} />
-                <YAxis fontSize={10} />
-                <Tooltip />
+                <YAxis 
+                  fontSize={10} 
+                  tickFormatter={(value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                />
+                <Tooltip 
+                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Custo']}
+                />
                 <Line type="monotone" dataKey="cost" stroke="#e11d48" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
