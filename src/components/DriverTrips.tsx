@@ -130,10 +130,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       setErrorMsg('Por favor, informe o motivo da sua viagem.');
       return;
     }
-    if (!checkInPhoto) {
-      setErrorMsg('Fotografia do hodômetro é item obrigatório para auditar check-in.');
-      return;
-    }
 
     const res = store.checkInTrip(selectedVehicleId, {
       km: Number(checkInKm),
@@ -177,10 +173,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
     }
     if (checkOutKm === '' || Number(checkOutKm) < activeTrip.checkIn.km) {
       setErrorMsg(`Quilometragem final não pode ser menor do que a inicial (${activeTrip.checkIn.km} km)`);
-      return;
-    }
-    if (!checkOutPhoto) {
-      setErrorMsg('Adicione a foto comprovante do painel/veículo para checkout.');
       return;
     }
 

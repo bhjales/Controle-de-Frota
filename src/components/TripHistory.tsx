@@ -257,16 +257,18 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                       )}
 
                       {/* Photo Thumbnail */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">Foto do Painel (Check-in):</span>
-                        <button
-                          onClick={() => setActivePhoto(trip.checkIn.photo)}
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-100 hover:scale-103 transition-all cursor-pointer"
-                        >
-                          <Eye className="w-3 h-3" />
-                          Visualizar Mídia
-                        </button>
-                      </div>
+                      {trip.checkIn.photo && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Foto do Painel (Check-in):</span>
+                          <button
+                            onClick={() => setActivePhoto(trip.checkIn.photo)}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-100 hover:scale-103 transition-all cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3" />
+                            Visualizar Mídia
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Check Out Column */}
@@ -323,16 +325,18 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                           )}
 
                           {/* Photo Thumbnail */}
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Foto do Painel (Check-out):</span>
-                            <button
-                              onClick={() => setActivePhoto(trip.checkOut?.photo || null)}
-                              className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded border border-indigo-100 hover:scale-103 transition-all cursor-pointer"
-                            >
-                              <Eye className="w-3 h-3" />
-                              Visualizar Mídia
-                            </button>
-                          </div>
+                          {trip.checkOut.photo && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">Foto do Painel (Check-out):</span>
+                              <button
+                                onClick={() => setActivePhoto(trip.checkOut?.photo || null)}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded border border-indigo-100 hover:scale-103 transition-all cursor-pointer"
+                              >
+                                <Eye className="w-3 h-3" />
+                                Visualizar Mídia
+                              </button>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <div className="bg-amber-50/50 border border-dashed border-amber-200 rounded-xl p-4 text-center text-amber-900 text-xs flex flex-col items-center justify-center min-h-[140px]">

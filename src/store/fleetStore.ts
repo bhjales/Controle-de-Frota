@@ -274,6 +274,12 @@ export class FleetStore {
             if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
               copy.vehicleId = null;
             }
+            if (copy.checkIn && copy.checkIn.photo) {
+              copy.checkIn.photo = '';
+            }
+            if (copy.checkOut && copy.checkOut.photo) {
+              copy.checkOut.photo = '';
+            }
           }
 
           // Clean up equipment_usages relation keys
@@ -283,6 +289,12 @@ export class FleetStore {
             }
             if (copy.equipmentId && !equipmentIds.has(copy.equipmentId)) {
               copy.equipmentId = null;
+            }
+            if (copy.checkIn && copy.checkIn.photo) {
+              copy.checkIn.photo = '';
+            }
+            if (copy.checkOut && copy.checkOut.photo) {
+              copy.checkOut.photo = '';
             }
           }
 
