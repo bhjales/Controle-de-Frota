@@ -140,6 +140,10 @@ export function ManagerDashboard({
     cost: number;
     resolvedAt: string;
     sentAt: string;
+    fiscalDocType?: 'nf' | 'pedido_compra' | 'outro';
+    fiscalDocNumber?: string;
+    providerName?: string;
+    hasFiscalPending?: boolean;
   }
 
   const allMaintenanceEvents: CompiledMaintenanceEvent[] = [];
@@ -155,7 +159,11 @@ export function ManagerDashboard({
         resolution: log.resolution || 'Concluída',
         cost: log.cost || 0,
         resolvedAt: log.resolvedAt || new Date().toISOString(),
-        sentAt: log.sentAt
+        sentAt: log.sentAt,
+        fiscalDocType: log.fiscalDocType,
+        fiscalDocNumber: log.fiscalDocNumber,
+        providerName: log.providerName,
+        hasFiscalPending: log.hasFiscalPending
       });
     });
   });
@@ -171,7 +179,11 @@ export function ManagerDashboard({
         resolution: log.resolution || 'Concluída',
         cost: log.cost || 0,
         resolvedAt: log.resolvedAt || new Date().toISOString(),
-        sentAt: log.sentAt
+        sentAt: log.sentAt,
+        fiscalDocType: log.fiscalDocType,
+        fiscalDocNumber: log.fiscalDocNumber,
+        providerName: log.providerName,
+        hasFiscalPending: log.hasFiscalPending
       });
     });
   });
@@ -1621,6 +1633,42 @@ export function ManagerDashboard({
                     <div className="text-[11px] leading-relaxed space-y-0.5 text-slate-650">
                       <p><strong className="text-slate-500 font-bold">Problema original:</strong> "{event.reason}"</p>
                       <p><strong className="text-slate-600 font-bold">Resolução técnica:</strong> {event.resolution}</p>
+                    </div>
+
+                    {/* Fiscal details block */}
+                    <div className="bg-white border border-slate-200/70 rounded-lg p-2 text-[10px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-semibold">Controle Fiscal:</span>
+                        {event.fiscalDocNumber ? (
+                          <span className="font-mono font-bold text-slate-800">
+                            {event.fiscalDocType === 'pedido_compra' ? 'PC: ' : event.fiscalDocType === 'nf' ? 'NF: ' : 'Doc: '}
+                            {event.fiscalDocNumber}
+                          </span>
+                        ) : (
+                          <span className="text-amber-700 font-semibold italic flex items-center gap-1">
+                            ⚠️ Não informado
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-semibold">Prestador:</span>
+                        {event.providerName ? (
+                          <span className="font-medium text-slate-800 truncate max-w-[190px]" title={event.providerName}>{event.providerName}</span>
+                        ) : (
+                          <span className="text-amber-700 font-semibold italic">⚠️ Não informado</span>
+                        )}
+                      </div>
+                      <div className="pt-0.5 border-t border-slate-100 flex justify-end">
+                        {event.hasFiscalPending ? (
+                          <span className="text-[9px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-250">
+                            Possui pendência de informações fiscais
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            ✓ Informações fiscais completas
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex justify-between items-center text-[9px] text-slate-400 italic pt-1 border-t border-slate-200/50">

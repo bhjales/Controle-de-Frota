@@ -16,11 +16,11 @@ import {
   Sparkles, 
   Check,
   X,
-  Pencil
+  Pencil,
+  AlertTriangle
 } from 'lucide-react';
 import { Equipment, EquipmentUsage, User as UserType, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
-import { CameraModal } from './CameraModal';
 
 interface EquipmentControlProps {
   currentUser: UserType;
@@ -78,21 +78,17 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
   const [refueled, setRefueled] = useState<boolean>(false);
   const [fuelLiters, setFuelLiters] = useState<number | ''>('');
 
-  // Camera handling
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraPurpose, setCameraPurpose] = useState<'checkin' | 'checkout'>('checkin');
-  const [capturedPhoto, setCapturedPhoto] = useState<string>('');
-
   // Equipment maintenance states
   const [eqMaintModalType, setEqMaintModalType] = useState<'send' | 'release' | null>(null);
   const [activeEqMaintId, setActiveEqMaintId] = useState<string | null>(null);
   const [eqMaintReasonInput, setEqMaintReasonInput] = useState('');
   const [eqMaintResolutionInput, setEqMaintResolutionInput] = useState('');
   const [eqMaintCostInput, setEqMaintCostInput] = useState('');
+  const [eqMaintFiscalDocType, setEqMaintFiscalDocType] = useState<'nf' | 'pedido_compra' | 'outro'>('nf');
+  const [eqMaintFiscalDocNumber, setEqMaintFiscalDocNumber] = useState('');
+  const [eqMaintProviderId, setEqMaintProviderId] = useState('');
+  const [eqMaintProviderCustomName, setEqMaintProviderCustomName] = useState('');
   const [eqMaintError, setEqMaintError] = useState('');
-
-  // Default mock hour meter base64 picture
-  const DEFAULT_HOR_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%230f172a" /><circle cx="200" cy="140" r="85" fill="none" stroke="%23fbbf24" stroke-width="8" stroke-dasharray="320 80" /><circle cx="200" cy="140" r="10" fill="%23fbbf24" /><rect x="130" y="200" width="140" height="32" rx="6" fill="%231e293b" stroke="%234b5563" stroke-width="2" /><text x="200" y="222" font-family="monospace" font-size="16" fill="%23fbbf24" font-weight="bold" text-anchor="middle">HORIMETRO registro</text></svg>';
 
   // Pre-fill Km, pre-allocation and hours when equipment changes
   useEffect(() => {
@@ -229,6 +225,10 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
       setEqMaintModalType('release');
       setEqMaintResolutionInput('');
       setEqMaintCostInput('');
+      setEqMaintFiscalDocType('nf');
+      setEqMaintFiscalDocNumber('');
+      setEqMaintProviderId('');
+      setEqMaintProviderCustomName('');
     } else {
       setEqMaintModalType('send');
       setEqMaintReasonInput('');
@@ -262,7 +262,24 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
         setEqMaintError('Por favor, insira um valor de custo válido (maior ou igual a R$ 0).');
         return;
       }
-      const res = store.releaseEquipmentFromMaintenance(activeEqMaintId, eqMaintResolutionInput.trim(), costNum);
+
+      // Determine provider name
+      const selectedSupplier = store.suppliers.find(s => s.id === eqMaintProviderId);
+      const providerName = selectedSupplier 
+        ? (selectedSupplier.tradeName || selectedSupplier.corporateName)
+        : eqMaintProviderCustomName.trim();
+
+      const res = store.releaseEquipmentFromMaintenance(
+        activeEqMaintId, 
+        eqMaintResolutionInput.trim(), 
+        costNum,
+        {
+          fiscalDocType: eqMaintFiscalDocType,
+          fiscalDocNumber: eqMaintFiscalDocNumber.trim(),
+          providerId: eqMaintProviderId || undefined,
+          providerName: providerName || undefined
+        }
+      );
       if (res.success) {
         setEqMaintModalType(null);
         setActiveEqMaintId(null);
@@ -280,23 +297,6 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
         alert(res.message);
       }
     }
-  };
-
-  // Trigger camera for check-in usage modal
-  const triggerCameraCheckIn = () => {
-    setCameraPurpose('checkin');
-    setCameraOpen(true);
-  };
-
-  // Trigger camera for checkout usage modal
-  const triggerCameraCheckOut = () => {
-    setCameraPurpose('checkout');
-    setCameraOpen(true);
-  };
-
-  // Handle camera capture callback
-  const handleCapturePhoto = (photoData: string) => {
-    setCapturedPhoto(photoData);
   };
 
   // Handle starting a machinery shift (Check-In)
@@ -333,8 +333,6 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
       return;
     }
 
-    const photoToSave = capturedPhoto || DEFAULT_HOR_PHOTO;
-
     // Build the formatted check-list items as requested
     const oilValText = `NIVEL DE OLEO NO NIVEL ( ${chkOilLevel === 'no_nivel' ? 'X' : ' ' } ) FOI COMPLETADO ( ${chkOilLevel === 'completado' ? 'X' : ' ' } )`;
     const waterValText = `AGUA DO RADIADOR NO NIVEL ( ${chkRadiatorWater === 'no_nivel' ? 'X' : ' ' } ) FOI COMPLETADO ( ${chkRadiatorWater === 'completado' ? 'X' : ' ' } )`;
@@ -358,8 +356,7 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
       hours: hoursValue,
       origin: origin.trim(),
       reason: reason.trim(),
-      observations: finalObservations,
-      photo: photoToSave
+      observations: finalObservations
     }, selectedWorkId || undefined);
 
     if (res.success) {
@@ -371,7 +368,6 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
       setOrigin('Central de Maquinário (Geral)');
       setReason('');
       setObservations('');
-      setCapturedPhoto('');
       
       // Reset checklist states
       setChkOilLevel('');
@@ -406,12 +402,9 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
       return;
     }
 
-    const photoToSave = capturedPhoto || DEFAULT_HOR_PHOTO;
-
     const res = store.checkOutEquipment(activeUsage.id, {
       hours: Number(checkOutHours),
       observations: checkoutObservations.trim() || 'Operação de maquinário concluída sem avarias detectadas.',
-      photo: photoToSave,
       refueled,
       fuelLiters: refueled && fuelLiters !== '' ? Number(fuelLiters) : undefined
     });
@@ -422,7 +415,6 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
       setCheckoutObservations('');
       setRefueled(false);
       setFuelLiters('');
-      setCapturedPhoto('');
       setTimeout(() => setOpSuccess(''), 5000);
     } else {
       setOpError(res.message);
@@ -582,53 +574,19 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                 <div className="border-t border-slate-100 pt-6 space-y-4">
                   <h4 className="text-sm font-bold text-slate-800 font-display">Concluir Turno e Registrar Horímetro Final</h4>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                        Horímetro Final no Painel (h) *
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        placeholder={`Mínimo sugerido: ${activeUsage.checkIn.hours.toFixed(1)} h`}
-                        value={checkOutHours}
-                        onChange={(e) => setCheckOutHours(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
-                        className="w-full text-sm font-mono font-bold bg-[#F8FAFC] border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-amber-700"
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                        Comprovante Ocorrência / Foto Horímetro
-                      </label>
-                      <div className="flex gap-2">
-                        {capturedPhoto ? (
-                          <div className="relative w-11 h-11 rounded-lg border border-emerald-400 overflow-hidden shrink-0">
-                            <img src={capturedPhoto} alt="Horímetro" className="w-full h-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => setCapturedPhoto('')}
-                              className="absolute inset-0 bg-black/60 flex items-center justify-center text-[9px] text-white font-bold hover:bg-black/80 font-mono"
-                            >
-                              EXCLUIR
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={triggerCameraCheckOut}
-                            className="h-11 px-4 border border-slate-200 rounded-xl flex items-center justify-center gap-1.5 text-xs text-slate-650 font-bold bg-slate-50 hover:bg-slate-100/80 active:scale-95 transition-all text-left cursor-pointer shrink-0"
-                          >
-                            <Camera className="w-4 h-4 text-slate-500" />
-                            Fotografar Painel
-                          </button>
-                        )}
-                        <span className="text-[10px] text-slate-400 leading-snug self-center max-w-xs">
-                          {capturedPhoto ? 'Foto capturada com sucesso!' : 'Tire uma foto opcional de comprovação para auditoria.'}
-                        </span>
-                      </div>
-                    </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                      Horímetro Final no Painel (h) *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder={`Mínimo sugerido: ${activeUsage.checkIn.hours.toFixed(1)} h`}
+                      value={checkOutHours}
+                      onChange={(e) => setCheckOutHours(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                      className="w-full text-sm font-mono font-bold bg-[#F8FAFC] border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all text-amber-700"
+                      required
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -890,44 +848,11 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                     </div>
                   </div>
 
-                  {/* Photo checklist block */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2 border-t border-slate-100">
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                        Comprovante Inicial / Foto do Painel
-                      </label>
-                      <div className="flex gap-2.5">
-                        {capturedPhoto ? (
-                          <div className="relative w-12 h-12 rounded-xl border border-emerald-400 overflow-hidden shrink-0 shadow-sm animate-fade-in">
-                            <img src={capturedPhoto} alt="Horímetro" className="w-full h-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => setCapturedPhoto('')}
-                              className="absolute inset-0 bg-black/70 flex items-center justify-center text-[9px] text-white font-bold hover:bg-black/90 font-mono transition-colors"
-                            >
-                              EXCLUIR
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={triggerCameraCheckIn}
-                            className="h-12 px-4 border border-slate-200 rounded-xl flex items-center justify-center gap-1.5 text-xs text-slate-650 font-bold bg-slate-50 hover:bg-slate-100/80 active:scale-95 transition-all text-left cursor-pointer shrink-0"
-                          >
-                            <Camera className="w-4 h-4 text-slate-500" />
-                            Fotografar Painel
-                          </button>
-                        )}
-                        <span className="text-[10px] text-slate-400 leading-snug self-center max-w-sm">
-                          Capture uma foto real ou fictícia do painel com o valor correspondente do Horímetro.
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="col-span-1 md:col-span-2 space-y-4 pt-2 border-t border-slate-100">
-                      <span className="text-[11px] uppercase font-mono font-extrabold tracking-wider text-amber-700 flex items-center gap-1.5">
-                        📋 Checklist Inicial de Segurança Obrigatório *
-                      </span>
+                  {/* Checklist block */}
+                  <div className="space-y-4 pt-2 border-t border-slate-100">
+                    <span className="text-[11px] uppercase font-mono font-extrabold tracking-wider text-amber-700 flex items-center gap-1.5">
+                      📋 Checklist Inicial de Segurança Obrigatório *
+                    </span>
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         {/* 1. Nível de Óleo */}
@@ -1102,9 +1027,8 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                         />
                       </div>
                     </div>
-                  </div>
 
-                  {opError && (
+                    {opError && (
                     <div className="bg-red-50 border border-red-150 p-3 rounded-xl text-xs font-semibold text-red-650 flex items-center gap-1">
                       <AlertCircle className="w-4 h-4 text-red-550 shrink-0" />
                       {opError}
@@ -1262,13 +1186,15 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                       </div>
                       
                       <div className="flex items-start gap-3">
-                        <div 
-                          className="w-16 h-12 bg-slate-200 border border-slate-300 rounded overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => alert(`Foto Comprovada do painel inicial de ${row.equipmentId}`)}
-                          title="Clique para obter foto ampliada"
-                        >
-                          <img src={row.checkIn.photo || DEFAULT_HOR_PHOTO} alt="Horímetro Inicial" className="w-full h-full object-cover" />
-                        </div>
+                        {row.checkIn.photo && (
+                          <div 
+                            className="w-16 h-12 bg-slate-200 border border-slate-300 rounded overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={() => alert(`Foto Comprovada do painel inicial de ${row.equipmentId}`)}
+                            title="Clique para obter foto ampliada"
+                          >
+                            <img src={row.checkIn.photo} alt="Horímetro Inicial" className="w-full h-full object-cover" />
+                          </div>
+                        )}
                         <div className="space-y-1 overflow-hidden leading-snug">
                           <div className="text-[11px] font-bold text-slate-650 space-y-0.5 mb-1 bg-white border border-slate-200/50 p-1.5 rounded-lg">
                             <p className="flex items-center gap-1.5"><strong className="font-bold text-slate-400 font-mono uppercase text-[9px]">Local / Origem:</strong> <span className="text-slate-700">{row.checkIn.origin || 'Central Maquinários'}</span></p>
@@ -1299,13 +1225,15 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
 
                       {row.checkOut ? (
                         <div className="flex items-start gap-3">
-                          <div 
-                            className="w-16 h-12 bg-slate-200 border border-slate-300 rounded overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                            onClick={() => alert(`Foto Comprovante de checkout: ${row.equipmentId}`)}
-                            title="Clique para obter foto ampliada"
-                          >
-                            <img src={row.checkOut.photo || DEFAULT_HOR_PHOTO} alt="Horímetro Final" className="w-full h-full object-cover" />
-                          </div>
+                          {row.checkOut.photo && (
+                            <div 
+                              className="w-16 h-12 bg-slate-200 border border-slate-300 rounded overflow-hidden shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                              onClick={() => alert(`Foto Comprovante de checkout: ${row.equipmentId}`)}
+                              title="Clique para obter foto ampliada"
+                            >
+                              <img src={row.checkOut.photo} alt="Horímetro Final" className="w-full h-full object-cover" />
+                            </div>
+                          )}
                           <div className="space-y-1 overflow-hidden leading-snug">
                             <p className="text-[10px] font-bold text-amber-600 font-mono">Horímetro Final: {row.checkOut.hours.toFixed(1)} h</p>
                             <p className="text-[11px] text-slate-650 font-bold">Consumo de Turno: <strong className="text-slate-800 font-bold">{(row.checkOut.hours - row.checkIn.hours).toFixed(1)} Horas</strong></p>
@@ -1643,12 +1571,47 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                       <div className="max-h-24 overflow-y-auto space-y-2 divide-y divide-slate-150/60 pr-1">
                         {mach.maintenanceHistory.map((log) => (
                           <div key={log.id} className="text-[10px] text-slate-600 pt-2 first:pt-0 font-sans">
-                            <div className="flex justify-between items-center font-mono font-bold text-slate-800">
-                              <span className="text-emerald-700 text-[9px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/40">Resolvido</span>
+                            <div className="flex justify-between items-center font-mono font-bold text-slate-800 gap-1 flex-wrap">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-emerald-700 text-[9px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/40">Resolvido</span>
+                                {log.hasFiscalPending ? (
+                                  <span className="text-amber-800 text-[8px] bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-300 font-bold flex items-center gap-0.5" title="Faltam NF/Pedido ou prestador">
+                                    ⚠️ Pendência Fiscal
+                                  </span>
+                                ) : (
+                                  <span className="text-blue-700 text-[8px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-bold" title="Informações fiscais registradas">
+                                    ✓ Regular Fiscal
+                                  </span>
+                                )}
+                              </div>
                               <span className="text-slate-900">Custo: R$ {log.cost?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'}</span>
                             </div>
                             <p className="mt-1 leading-normal"><strong className="text-slate-500 font-bold">Problema:</strong> "{log.reason}"</p>
                             <p className="mt-0.5 leading-normal"><strong className="text-slate-500 font-bold">Resolução:</strong> {log.resolution}</p>
+
+                            {/* Fiscal Info Row */}
+                            <div className="mt-1 bg-white p-1.5 rounded border border-slate-200 text-[9px] space-y-0.5">
+                              <div className="flex justify-between">
+                                <span className="text-slate-500 font-semibold">Controle Fiscal:</span>
+                                {log.fiscalDocNumber ? (
+                                  <span className="font-mono font-bold text-slate-800">
+                                    {log.fiscalDocType === 'pedido_compra' ? 'PC: ' : log.fiscalDocType === 'nf' ? 'NF: ' : 'Doc: '}
+                                    {log.fiscalDocNumber}
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-600 italic font-semibold">Não informado (Pendente)</span>
+                                )}
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500 font-semibold">Prestador/Oficina:</span>
+                                {log.providerName ? (
+                                  <span className="font-medium text-slate-800 truncate max-w-[170px]" title={log.providerName}>{log.providerName}</span>
+                                ) : (
+                                  <span className="text-amber-600 italic font-semibold">Não informado (Pendente)</span>
+                                )}
+                              </div>
+                            </div>
+
                             {log.workName && (
                               <p className="mt-0.5 leading-normal"><strong className="text-slate-500 font-bold">Obra:</strong> {log.workName}</p>
                             )}
@@ -1698,14 +1661,6 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
           </div>
         </div>
       )}
-
-      {/* REUSABLE AUDITING CAMERA MODAL */}
-      <CameraModal
-        isOpen={cameraOpen}
-        onClose={() => setCameraOpen(false)}
-        onCapture={handleCapturePhoto}
-        title={cameraPurpose === 'checkin' ? 'Check-in: Foto do Horímetro' : 'Check-out: Foto do Horímetro Final'}
-      />
 
       {/* Equipment Maintenance Prompt Modal Overlay */}
       {eqMaintModalType && (
@@ -1785,6 +1740,96 @@ export function EquipmentControl({ currentUser, equipments, equipmentUsages, sto
                     <span className="text-[9px] text-slate-400 block font-medium">
                       Insira apenas valores numéricos. Use ponto (.) para centavos se necessário (ex: 550 ou 1240.50).
                     </span>
+                  </div>
+
+                  {/* Fiscal Information & Maintenance Provider */}
+                  <div className="space-y-3 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] uppercase font-bold text-slate-700 tracking-wider">
+                        Controle Fiscal & Prestador
+                      </label>
+                      <span className="text-[9px] font-semibold text-slate-400">
+                        Obrigatório p/ conformidade fiscal
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] uppercase font-bold text-slate-500">
+                          Tipo de Documento Fiscal
+                        </label>
+                        <select
+                          value={eqMaintFiscalDocType}
+                          onChange={(e) => setEqMaintFiscalDocType(e.target.value as any)}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium text-slate-800"
+                        >
+                          <option value="nf">Nota Fiscal (NF)</option>
+                          <option value="pedido_compra">Pedido de Compra (PC)</option>
+                          <option value="outro">Outro Documento</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] uppercase font-bold text-slate-500">
+                          Nº do Documento Fiscal
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: NF 123456 ou PC 987"
+                          value={eqMaintFiscalDocNumber}
+                          onChange={(e) => setEqMaintFiscalDocNumber(e.target.value)}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium text-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Prestador da Manutenção */}
+                    <div className="space-y-1 pt-1">
+                      <label className="block text-[10px] uppercase font-bold text-slate-500">
+                        Prestador da Manutenção / Oficina
+                      </label>
+                      <select
+                        value={eqMaintProviderId}
+                        onChange={(e) => {
+                          setEqMaintProviderId(e.target.value);
+                          if (e.target.value) {
+                            const sup = store.suppliers.find(s => s.id === e.target.value);
+                            if (sup) setEqMaintProviderCustomName(sup.tradeName || sup.corporateName);
+                          }
+                        }}
+                        className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium text-slate-800 mb-1.5"
+                      >
+                        <option value="">-- Selecione um Prestador/Fornecedor cadastrado --</option>
+                        {store.suppliers
+                          .filter(s => s.status === 'active')
+                          .map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.tradeName ? `${s.tradeName} (${s.corporateName})` : s.corporateName} - CNPJ: {s.cnpj}
+                            </option>
+                          ))}
+                        <option value="manual">+ Outro Prestador / Não listado</option>
+                      </select>
+
+                      {(!eqMaintProviderId || eqMaintProviderId === 'manual') && (
+                        <input
+                          type="text"
+                          placeholder="Digite o nome da oficina ou prestador de serviço..."
+                          value={eqMaintProviderCustomName}
+                          onChange={(e) => setEqMaintProviderCustomName(e.target.value)}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium text-slate-800"
+                        />
+                      )}
+                    </div>
+
+                    {/* Notice if fiscal info is missing */}
+                    {(!eqMaintFiscalDocNumber.trim() || (!eqMaintProviderId && !eqMaintProviderCustomName.trim())) && (
+                      <div className="bg-amber-50 border border-amber-250 p-2.5 rounded-lg text-[10px] text-amber-800 flex items-start gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-bold">Aviso de Pendência Fiscal:</strong> Caso não forneça o número de controle fiscal ou o prestador, a manutenção do maquinário será finalizada com status de <u>pendência de informações fiscais</u>.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

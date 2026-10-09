@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Play, CheckCircle, Navigation, MapPin, Compass, AlertCircle, Camera as CameraIcon, Fuel, Calendar, Gauge, FileText, ArrowRight, Hourglass } from 'lucide-react';
+import { Play, CheckCircle, Navigation, MapPin, Compass, AlertCircle, Fuel, Calendar, Gauge, FileText, ArrowRight, Hourglass } from 'lucide-react';
 import { Vehicle, Trip, User, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
-import { CameraModal } from './CameraModal';
 
 interface DriverTripsProps {
   vehicles: Vehicle[];
@@ -34,18 +33,11 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
   const [destination, setDestination] = useState('');
   const [reason, setReason] = useState('');
   const [checkInObs, setCheckInObs] = useState('');
-  const [checkInPhoto, setCheckInPhoto] = useState('');
   
   // --- CHECK-OUT FORM STATES ---
   const [checkOutKm, setCheckOutKm] = useState<number | ''>('');
   const [checkOutFuel, setCheckOutFuel] = useState('1/2');
   const [checkOutObs, setCheckOutObs] = useState('');
-  const [checkOutPhoto, setCheckOutPhoto] = useState('');
-
-  // --- CAMERA MODAL STATE ---
-  const [cameraModalOpen, setCameraModalOpen] = useState(false);
-  const [cameraModalTitle, setCameraModalTitle] = useState('');
-  const [photoTarget, setPhotoTarget] = useState<'checkin' | 'checkout' | null>(null);
 
   // --- GENERAL RESPONSE FEEDBACK ---
   const [errorMsg, setErrorMsg] = useState('');
@@ -95,20 +87,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
     }
   }, [activeTrip]);
 
-  const openCameraModal = (target: 'checkin' | 'checkout', title: string) => {
-    setPhotoTarget(target);
-    setCameraModalTitle(title);
-    setCameraModalOpen(true);
-  };
-
-  const handleCapturePhoto = (base64Data: string) => {
-    if (photoTarget === 'checkin') {
-      setCheckInPhoto(base64Data);
-    } else if (photoTarget === 'checkout') {
-      setCheckOutPhoto(base64Data);
-    }
-  };
-
   const handleCheckInSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -137,8 +115,7 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       origin: origin.trim(),
       destination: destination.trim(),
       reason: reason.trim(),
-      observations: checkInObs.trim(),
-      photo: checkInPhoto
+      observations: checkInObs.trim()
     }, selectedWorkId || undefined);
 
     if (res.success) {
@@ -152,7 +129,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       setDestination('');
       setReason('');
       setCheckInObs('');
-      setCheckInPhoto('');
       
       setTimeout(() => {
         setSuccessMsg('');
@@ -179,8 +155,7 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
     const res = store.checkOutTrip(activeTrip.id, {
       km: Number(checkOutKm),
       fuel: checkOutFuel,
-      observations: checkOutObs.trim(),
-      photo: checkOutPhoto
+      observations: checkOutObs.trim()
     });
 
     if (res.success) {
@@ -189,7 +164,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       setCheckOutKm('');
       setCheckOutFuel('1/2');
       setCheckOutObs('');
-      setCheckOutPhoto('');
       
       setTimeout(() => {
         setSuccessMsg('');
@@ -210,7 +184,7 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
             {activeTrip ? 'ESTÁGIO ATIVO: VIAGEM EM CURSO' : 'ESTÁGIO LIVRE: PRONTO PARA TRABALHAR'}
           </span>
           <h2 className="text-xl font-bold tracking-tight pt-1 font-display">Módulo de Gestão de Viagem</h2>
-          <p className="text-xs text-slate-300">Faça o check-in fotográfico ao pegar um carro e o check-out ao devolvê-lo.</p>
+          <p className="text-xs text-slate-300">Faça o check-in ao pegar um veículo e o check-out ao devolvê-lo.</p>
         </div>
         
         {activeTrip && (
@@ -410,45 +384,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
                   placeholder="Descreva eventuais problemas visíveis no carro ou observações sobre o clima, pneus, etc (opcional)"
                 />
               </div>
-
-              {/* Camera snap of Odometer - REQUIREMENT */}
-              <div className="space-y-1.5 md:col-span-2">
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Foto do Hodômetro (Obrigatório) *</label>
-                
-                <div className="flex flex-col sm:flex-row items-center gap-4 bg-[#F8FAFC] p-4 rounded-xl border border-slate-200">
-                  {checkInPhoto ? (
-                    <div className="relative w-36 aspect-video bg-black rounded-lg overflow-hidden border border-blue-500 shrink-0">
-                      <img src={checkInPhoto} alt="Comprovante de Hodômetro" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setCheckInPhoto('')}
-                        className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold"
-                      >
-                        Substituir Foto
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-36 aspect-video bg-slate-200 border border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 select-none">
-                      <FileText className="w-6 h-6 mb-1" />
-                      <span className="text-[9px] font-mono tracking-wider">MÍDIA AUSENTE</span>
-                    </div>
-                  )}
-
-                  <div className="text-center sm:text-left flex-1 space-y-2">
-                    <p className="text-xs font-bold text-slate-800">Forneça o comprovante fotográfico do painel</p>
-                    <p className="text-xs text-slate-500">Capture o painel com km visível para evitar glosas no faturamento ou fraudes.</p>
-                    
-                    <button
-                      type="button"
-                      onClick={() => openCameraModal('checkin', 'Foto do Hodômetro de Saída')}
-                      className="inline-flex items-center gap-1.5 px-4.5 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer transition-all shadow-sm active:scale-95"
-                    >
-                      <CameraIcon className="w-4 h-4" />
-                      {checkInPhoto ? 'Alterar Foto' : 'Capturar Foto do Painel'}
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Form actions and alerts */}
@@ -563,45 +498,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
                   placeholder="Descreva se abasteceu, se percebeu algum problema no carro ou quaisquer incidentes no trânsito (opcional)"
                 />
               </div>
-
-              {/* Photo check for checkout */}
-              <div className="space-y-1.5 md:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">Foto do Estado do Carro / Odômetro (Checkout) *</label>
-                
-                <div className="flex flex-col sm:flex-row items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                  {checkOutPhoto ? (
-                    <div className="relative w-36 aspect-video bg-black rounded-lg overflow-hidden border border-indigo-500 shrink-0">
-                      <img src={checkOutPhoto} alt="Comprovante de Checkout" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setCheckOutPhoto('')}
-                        className="absolute inset-0 bg-black/60 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold"
-                      >
-                        Substituir Foto
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-36 aspect-video bg-slate-200 border border-slate-300 rounded-lg flex flex-col items-center justify-center text-slate-400 shrink-0 select-none">
-                      <FileText className="w-6 h-6 mb-1" />
-                      <span className="text-[9px] font-mono tracking-wider">MÍDIA AUSENTE</span>
-                    </div>
-                  )}
-
-                  <div className="text-center sm:text-left flex-1 space-y-2">
-                    <p className="text-xs font-bold text-slate-800">Submeta fotos de comprovação na finalização</p>
-                    <p className="text-xs text-slate-500 font-medium">Fotografe o hodômetro final para arquivamento ou eventuais danos no automóvel.</p>
-                    
-                    <button
-                      type="button"
-                      onClick={() => openCameraModal('checkout', 'Foto do Painel de Checkout')}
-                      className="inline-flex items-center gap-1.5 px-4.5 py-2 text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer transition-all shadow-sm active:scale-95"
-                    >
-                      <CameraIcon className="w-4 h-4" />
-                      {checkOutPhoto ? 'Alterar Foto' : 'Capturar Foto do Painel'}
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Error alerts */}
@@ -629,14 +525,6 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
           </form>
         </div>
       )}
-
-      {/* Camera Capture Dialog */}
-      <CameraModal
-        isOpen={cameraModalOpen}
-        onClose={() => setCameraModalOpen(false)}
-        onCapture={handleCapturePhoto}
-        title={cameraModalTitle}
-      />
     </div>
   );
 }

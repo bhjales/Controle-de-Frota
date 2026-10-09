@@ -27,6 +27,12 @@ export interface MaintenanceLog {
   triggeredAtKm?: number;    // KM/Hours when maintenance was requested
   triggeredAtHours?: number; // Hours when maintenance was requested
   isOilChange?: boolean;
+  // Fiscal control and maintenance provider
+  fiscalDocType?: FiscalDocType; // 'nf' | 'pedido_compra' | 'outro'
+  fiscalDocNumber?: string;      // Número do documento fiscal (NF ou Pedido de Compra)
+  providerId?: string;           // Prestador/Fornecedor da manutenção cadastrado
+  providerName?: string;         // Nome do prestador do serviço/oficina
+  hasFiscalPending?: boolean;    // Indica se possui pendência de informações fiscais
 }
 
 export interface Vehicle {
@@ -62,7 +68,7 @@ export interface CheckInDetails {
   destination: string;
   reason: string;
   observations: string;
-  photo: string; // Base64 or sample photo URL
+  photo?: string; // Optional photo
   time: string;
 }
 
@@ -70,7 +76,7 @@ export interface CheckOutDetails {
   km: number;
   fuel: string;
   observations: string;
-  photo: string; // Base64 or sample photo URL
+  photo?: string; // Optional photo
   time: string;
 }
 
@@ -115,14 +121,14 @@ export interface EquipmentCheckInDetails {
   origin?: string; // Machinery operation origin
   reason: string;
   observations: string;
-  photo: string;
+  photo?: string;
   time: string;
 }
 
 export interface EquipmentCheckOutDetails {
   hours: number;
   observations: string;
-  photo: string;
+  photo?: string;
   time: string;
   refueled?: boolean;
   fuelLiters?: number;
@@ -159,3 +165,81 @@ export interface EquipmentType {
   name: string;
 }
 
+export type SupplierCategory = 'fornecedor' | 'prestador';
+
+export interface Supplier {
+  id: string;
+  cnpj: string;              // CNPJ (14 dígitos, formato: 00.000.000/0000-00)
+  corporateName: string;     // Nome Razão Social
+  tradeName?: string;        // Nome Fantasia
+  category: SupplierCategory; // 'fornecedor' ou 'prestador'
+  contactName?: string;      // Nome do Responsável / Contato
+  phone?: string;            // Telefone / WhatsApp
+  email?: string;            // E-mail
+  city?: string;             // Município
+  state?: string;            // UF (2 letras)
+  servicesOrProducts?: string; // Descrição de serviços prestados ou materiais fornecidos
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+export type FiscalDocType = 'nf' | 'pedido_compra' | 'outro';
+
+export interface FuelInflow {
+  id: string;
+  workId: string;
+  workName: string;
+  supplierId: string;
+  supplierName: string;
+  supplierCnpj?: string;
+  fiscalDocType: FiscalDocType;
+  fiscalDocNumber: string; // Número de controle fiscal (NF ou Pedido de Compra)
+  fuelType: string; // Diesel ou Gasolina
+  liters: number; // Quantidade em Litros recebida
+  totalCost: number; // Custo total da entrada (R$)
+  unitCost: number; // Custo unitário por litro (R$/L)
+  date: string; // Data do recebimento
+  receivedBy?: string; // Responsável pelo recebimento
+  notes?: string;
+  createdAt: string;
+}
+
+export type FuelDispenseType = 'obra' | 'fornecedor_direto';
+
+export interface FuelDispense {
+  id: string;
+  dispenseType?: FuelDispenseType; // 'obra' (consumindo estoque da obra) ou 'fornecedor_direto' (abastecendo direto de fornecedor)
+  workId?: string; // Opcional se for direto em fornecedor sem obra vinculada, ou obra de rateio
+  workName?: string;
+  supplierId?: string; // Obrigatório se dispenseType === 'fornecedor_direto'
+  supplierName?: string;
+  supplierCnpj?: string;
+  fiscalDocType?: FiscalDocType; // NF ou Pedido quando abastecido direto no posto/fornecedor
+  fiscalDocNumber?: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  vehicleModel: string;
+  fuelType: string;
+  liters: number; // Quantidade em Litros consumida
+  currentKmOrHours?: number; // KM ou Horímetro registrado no abastecimento
+  driverId?: string;
+  driverName?: string;
+  date: string; // Data do abastecimento
+  unitCost?: number; // Preço do litro no fornecedor ou custo médio
+  totalCost?: number; // Custo total do abastecimento
+  calculatedCost?: number; // Compatibilidade retroativa
+  notes?: string;
+  createdAt: string;
+}
+
+export interface WorkFuelBalance {
+  workId: string;
+  workName: string;
+  totalInflowLiters: number;
+  totalDispenseLiters: number;
+  balanceLiters: number;
+  totalCost: number;
+  averageCostPerLiter: number;
+  inflowCount: number;
+  dispenseCount: number;
+}

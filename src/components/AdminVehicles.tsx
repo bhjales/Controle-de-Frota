@@ -159,6 +159,11 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [maintCostInput, setMaintCostInput] = useState('');
   const [isOilChange, setIsOilChange] = useState(false);
   const [maintNextOilKm, setMaintNextOilKm] = useState('');
+  // Fiscal & Provider details
+  const [maintFiscalDocType, setMaintFiscalDocType] = useState<'nf' | 'pedido_compra' | 'outro'>('nf');
+  const [maintFiscalDocNumber, setMaintFiscalDocNumber] = useState('');
+  const [maintProviderId, setMaintProviderId] = useState('');
+  const [maintProviderCustomName, setMaintProviderCustomName] = useState('');
   const [maintError, setMaintError] = useState('');
 
   const handleOpenMaintenanceModal = (vehicleId: string, currentStatus: string) => {
@@ -170,6 +175,10 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
       setMaintCostInput('');
       setIsOilChange(false);
       setMaintNextOilKm('');
+      setMaintFiscalDocType('nf');
+      setMaintFiscalDocNumber('');
+      setMaintProviderId('');
+      setMaintProviderCustomName('');
     } else {
       setMaintModalType('send');
       setMaintReasonInput('');
@@ -203,12 +212,25 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         setMaintError('Por favor, insira um valor de custo válido (maior ou igual a R$ 0).');
         return;
       }
+
+      // Determine provider name
+      const selectedSupplier = store.suppliers.find(s => s.id === maintProviderId);
+      const providerName = selectedSupplier 
+        ? (selectedSupplier.tradeName || selectedSupplier.corporateName)
+        : maintProviderCustomName.trim();
+
       const res = store.releaseVehicleFromMaintenance(
         activeMaintVehicleId, 
         maintResolutionInput.trim(), 
         costNum, 
         isOilChange, 
-        isOilChange ? Number(maintNextOilKm) : undefined
+        isOilChange ? Number(maintNextOilKm) : undefined,
+        {
+          fiscalDocType: maintFiscalDocType,
+          fiscalDocNumber: maintFiscalDocNumber.trim(),
+          providerId: maintProviderId || undefined,
+          providerName: providerName || undefined
+        }
       );
       if (res.success) {
         setMaintModalType(null);
@@ -551,12 +573,47 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                       <div className="max-h-24 overflow-y-auto space-y-2 divide-y divide-slate-150 pr-1">
                         {vehicle.maintenanceHistory.map((log) => (
                           <div key={log.id} className="text-[10px] text-slate-600 pt-2 first:pt-0">
-                            <div className="flex justify-between items-center font-mono font-bold text-slate-800">
-                              <span className="text-emerald-700 text-[9px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-250/50">Resolvido</span>
+                            <div className="flex justify-between items-center font-mono font-bold text-slate-800 gap-1 flex-wrap">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-emerald-700 text-[9px] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-250/50">Resolvido</span>
+                                {log.hasFiscalPending ? (
+                                  <span className="text-amber-800 text-[8px] bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-300 font-bold flex items-center gap-0.5" title="Faltam NF/Pedido ou prestador">
+                                    ⚠️ Pendência Fiscal
+                                  </span>
+                                ) : (
+                                  <span className="text-blue-700 text-[8px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 font-bold" title="Informações fiscais registradas">
+                                    ✓ Regular Fiscal
+                                  </span>
+                                )}
+                              </div>
                               <span className="text-slate-900">Custo: R$ {log.cost?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'}</span>
                             </div>
                             <p className="mt-1"><strong className="text-slate-500 font-bold">Problema:</strong> "{log.reason}"</p>
                             <p className="mt-0.5"><strong className="text-slate-500 font-bold">Resolução:</strong> {log.resolution}</p>
+                            
+                            {/* Fiscal Info Row */}
+                            <div className="mt-1 bg-white p-1.5 rounded border border-slate-200 text-[9px] space-y-0.5">
+                              <div className="flex justify-between">
+                                <span className="text-slate-500 font-semibold">Controle Fiscal:</span>
+                                {log.fiscalDocNumber ? (
+                                  <span className="font-mono font-bold text-slate-800">
+                                    {log.fiscalDocType === 'pedido_compra' ? 'PC: ' : log.fiscalDocType === 'nf' ? 'NF: ' : 'Doc: '}
+                                    {log.fiscalDocNumber}
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-600 italic font-semibold">Não informado (Pendente)</span>
+                                )}
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500 font-semibold">Prestador/Oficina:</span>
+                                {log.providerName ? (
+                                  <span className="font-medium text-slate-800 truncate max-w-[170px]" title={log.providerName}>{log.providerName}</span>
+                                ) : (
+                                  <span className="text-amber-600 italic font-semibold">Não informado (Pendente)</span>
+                                )}
+                              </div>
+                            </div>
+
                             {log.workName && (
                               <p className="mt-0.5"><strong className="text-slate-500 font-bold">Obra:</strong> {log.workName}</p>
                             )}
@@ -704,6 +761,96 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                     <span className="text-[9px] text-slate-450 block font-medium">
                       Insira apenas números. Use ponto (.) para centavos se necessário (ex: 1540.80 ou 250).
                     </span>
+                  </div>
+
+                  {/* Fiscal Information & Maintenance Provider */}
+                  <div className="space-y-3 p-3.5 bg-slate-50/80 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[10px] uppercase font-bold text-slate-700 tracking-wider">
+                        Controle Fiscal & Prestador
+                      </label>
+                      <span className="text-[9px] font-semibold text-slate-400">
+                        Obrigatório p/ conformidade fiscal
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] uppercase font-bold text-slate-500">
+                          Tipo de Documento Fiscal
+                        </label>
+                        <select
+                          value={maintFiscalDocType}
+                          onChange={(e) => setMaintFiscalDocType(e.target.value as any)}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium"
+                        >
+                          <option value="nf">Nota Fiscal (NF)</option>
+                          <option value="pedido_compra">Pedido de Compra (PC)</option>
+                          <option value="outro">Outro Documento</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] uppercase font-bold text-slate-500">
+                          Nº do Documento Fiscal
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ex: NF 123456 ou PC 987"
+                          value={maintFiscalDocNumber}
+                          onChange={(e) => setMaintFiscalDocNumber(e.target.value)}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Prestador da Manutenção */}
+                    <div className="space-y-1 pt-1">
+                      <label className="block text-[10px] uppercase font-bold text-slate-500">
+                        Prestador da Manutenção / Oficina
+                      </label>
+                      <select
+                        value={maintProviderId}
+                        onChange={(e) => {
+                          setMaintProviderId(e.target.value);
+                          if (e.target.value) {
+                            const sup = store.suppliers.find(s => s.id === e.target.value);
+                            if (sup) setMaintProviderCustomName(sup.tradeName || sup.corporateName);
+                          }
+                        }}
+                        className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium mb-1.5"
+                      >
+                        <option value="">-- Selecione um Prestador/Fornecedor cadastrado --</option>
+                        {store.suppliers
+                          .filter(s => s.status === 'active')
+                          .map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.tradeName ? `${s.tradeName} (${s.corporateName})` : s.corporateName} - CNPJ: {s.cnpj}
+                            </option>
+                          ))}
+                        <option value="manual">+ Outro Prestador / Não listado</option>
+                      </select>
+
+                      {(!maintProviderId || maintProviderId === 'manual') && (
+                        <input
+                          type="text"
+                          placeholder="Digite o nome da oficina ou prestador de serviço..."
+                          value={maintProviderCustomName}
+                          onChange={(e) => setMaintProviderCustomName(e.target.value)}
+                          className="w-full text-xs px-3 py-2 bg-white border border-slate-200 focus:border-emerald-500 rounded-lg outline-none font-medium"
+                        />
+                      )}
+                    </div>
+
+                    {/* Notice if fiscal info is missing */}
+                    {(!maintFiscalDocNumber.trim() || (!maintProviderId && !maintProviderCustomName.trim())) && (
+                      <div className="bg-amber-50 border border-amber-250 p-2.5 rounded-lg text-[10px] text-amber-800 flex items-start gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="font-bold">Aviso de Pendência Fiscal:</strong> Caso não forneça o número de controle fiscal ou o prestador, a manutenção será finalizada com status de <u>pendência de informações fiscais</u>.
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Oil Change Checkbox & Next KM */}

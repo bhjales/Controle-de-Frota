@@ -1,4 +1,4 @@
-import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog } from '../types';
+import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog, Supplier, SupplierCategory, FuelInflow, FuelDispense, FuelDispenseType, FiscalDocType, WorkFuelBalance } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Simple high-quality odometer and dashboard SVGs represented as base64 or clean dataURI to seed initial photos nicely
@@ -18,6 +18,39 @@ const INITIAL_EQUIPMENT_TYPES: EquipmentType[] = [
 const INITIAL_VEHICLE_CATEGORIES: VehicleCategory[] = [
   { id: 'cat-1', name: 'Utilitário' },
   { id: 'cat-2', name: 'Caminhão' }
+];
+
+const INITIAL_SUPPLIERS: Supplier[] = [
+  {
+    id: 'sup-1',
+    cnpj: '12.345.678/0001-90',
+    corporateName: 'Auto Mecânica e Serviços Diesel Ltda',
+    tradeName: 'Mecânica Diesel Central',
+    category: 'prestador',
+    contactName: 'Carlos Eduardo Silva',
+    phone: '(11) 98765-4321',
+    email: 'contato@dieselmecanica.com.br',
+    city: 'São Paulo',
+    state: 'SP',
+    servicesOrProducts: 'Manutenção preventiva e corretiva de motores pesados, suspensão, freios e alinhamento.',
+    status: 'active',
+    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  },
+  {
+    id: 'sup-2',
+    cnpj: '98.765.432/0001-10',
+    corporateName: 'Distribuidora de Peças e Lubrificantes Rodoviários S/A',
+    tradeName: 'Rodopeças Auto Peças',
+    category: 'fornecedor',
+    contactName: 'Mariana Santos',
+    phone: '(11) 97654-3210',
+    email: 'vendas@rodopecas.com.br',
+    city: 'Campinas',
+    state: 'SP',
+    servicesOrProducts: 'Filtros de óleo e ar, óleos lubrificantes, pneus pesados, baterias e autopeças.',
+    status: 'active',
+    createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString()
+  }
 ];
 
 const INITIAL_VEHICLES: Vehicle[] = [];
@@ -83,6 +116,8 @@ function loadFromStorage<T>(key: string, defaultValue: T): T {
 }
 
 const INITIAL_WORKS: ConstructionWork[] = [];
+const INITIAL_FUEL_INFLOWS: FuelInflow[] = [];
+const INITIAL_FUEL_DISPENSES: FuelDispense[] = [];
 
 // Helper to save serializable JSON is safe
 function saveToStorage<T>(key: string, data: T): void {
@@ -101,6 +136,9 @@ export class FleetStore {
   public works: ConstructionWork[] = [];
   public equipmentTypes: EquipmentType[] = [];
   public vehicleCategories: VehicleCategory[] = [];
+  public suppliers: Supplier[] = [];
+  public fuelInflows: FuelInflow[] = [];
+  public fuelDispenses: FuelDispense[] = [];
   public currentUser: User | null = null;
 
   // Snapshot for differential syncing
@@ -119,6 +157,9 @@ export class FleetStore {
       works: JSON.stringify(this.works),
       equipmentTypes: JSON.stringify(this.equipmentTypes),
       vehicleCategories: JSON.stringify(this.vehicleCategories),
+      suppliers: JSON.stringify(this.suppliers),
+      fuelInflows: JSON.stringify(this.fuelInflows),
+      fuelDispenses: JSON.stringify(this.fuelDispenses),
     };
   }
 
@@ -168,7 +209,10 @@ export class FleetStore {
         works,
         equipmentTypes,
         vehicleCategories,
-        maintenanceLogs
+        maintenanceLogs,
+        suppliers,
+        fuelInflows,
+        fuelDispenses
       ] = await Promise.all([
         fetchTable('users'),
         fetchTable('vehicles'),
@@ -178,7 +222,10 @@ export class FleetStore {
         fetchTable('construction_works'),
         fetchTable('equipment_types'),
         fetchTable('vehicle_categories'),
-        fetchTable('maintenance_logs')
+        fetchTable('maintenance_logs'),
+        fetchTable('suppliers'),
+        fetchTable('fuel_inflows'),
+        fetchTable('fuel_dispenses')
       ]);
 
       if (users !== null) this.users = users as User[];
@@ -187,6 +234,9 @@ export class FleetStore {
       if (vehicleCategories !== null) this.vehicleCategories = vehicleCategories as VehicleCategory[];
       if (trips !== null) this.trips = trips as Trip[];
       if (equipmentUsages !== null) this.equipmentUsages = equipmentUsages as EquipmentUsage[];
+      if (suppliers !== null) this.suppliers = suppliers as Supplier[];
+      if (fuelInflows !== null) this.fuelInflows = fuelInflows as FuelInflow[];
+      if (fuelDispenses !== null) this.fuelDispenses = fuelDispenses as FuelDispense[];
       
       const vData = vehicles as Vehicle[] | null;
       const eData = equipments as Equipment[] | null;
@@ -429,12 +479,18 @@ export class FleetStore {
       
       const cTrips = this.getChangedItems('trips', this.trips);
       const cUsages = this.getChangedItems('equipmentUsages', this.equipmentUsages);
+      const cSuppliers = this.getChangedItems('suppliers', this.suppliers);
+      const cFuelInflows = this.getChangedItems('fuelInflows', this.fuelInflows);
+      const cFuelDispenses = this.getChangedItems('fuelDispenses', this.fuelDispenses);
 
       // Sync only changed items
       if (cUsers.length) await this.syncTable('users', cUsers);
       if (cWorks.length) await this.syncTable('construction_works', cWorks);
       if (cEqTypes.length) await this.syncTable('equipment_types', cEqTypes);
       if (cVehCats.length) await this.syncTable('vehicle_categories', cVehCats);
+      if (cSuppliers.length) await this.syncTable('suppliers', cSuppliers);
+      if (cFuelInflows.length) await this.syncTable('fuel_inflows', cFuelInflows);
+      if (cFuelDispenses.length) await this.syncTable('fuel_dispenses', cFuelDispenses);
 
       if (cVehicles.length) await this.syncTable('vehicles', cVehicles);
       if (cEquipments.length) await this.syncTable('equipments', cEquipments);
@@ -493,6 +549,9 @@ export class FleetStore {
     this.works = loadFromStorage<ConstructionWork[]>('ff_works', INITIAL_WORKS);
     this.equipmentTypes = loadFromStorage<EquipmentType[]>('ff_equipment_types', INITIAL_EQUIPMENT_TYPES);
     this.vehicleCategories = loadFromStorage<VehicleCategory[]>('ff_vehicle_categories', INITIAL_VEHICLE_CATEGORIES);
+    this.suppliers = loadFromStorage<Supplier[]>('ff_suppliers', INITIAL_SUPPLIERS);
+    this.fuelInflows = loadFromStorage<FuelInflow[]>('ff_fuel_inflows', INITIAL_FUEL_INFLOWS);
+    this.fuelDispenses = loadFromStorage<FuelDispense[]>('ff_fuel_dispenses', INITIAL_FUEL_DISPENSES);
     this.currentUser = loadFromStorage<User | null>('ff_current_user', null);
 
     // Dynamic backfill migration: ensure all existing users have a valid loginId, password, and isApproved fields
@@ -555,6 +614,9 @@ export class FleetStore {
     saveToStorage<ConstructionWork[]>('ff_works', this.works);
     saveToStorage<EquipmentType[]>('ff_equipment_types', this.equipmentTypes);
     saveToStorage<VehicleCategory[]>('ff_vehicle_categories', this.vehicleCategories);
+    saveToStorage<Supplier[]>('ff_suppliers', this.suppliers);
+    saveToStorage<FuelInflow[]>('ff_fuel_inflows', this.fuelInflows);
+    saveToStorage<FuelDispense[]>('ff_fuel_dispenses', this.fuelDispenses);
     saveToStorage<User | null>('ff_current_user', this.currentUser);
   }
 
@@ -762,7 +824,19 @@ export class FleetStore {
     return { success, message };
   }
 
-  public releaseVehicleFromMaintenance(vehicleId: string, resolution: string, cost: number, isOilChange: boolean, nextOilChangeKm?: number): { success: boolean, message: string } {
+  public releaseVehicleFromMaintenance(
+    vehicleId: string, 
+    resolution: string, 
+    cost: number, 
+    isOilChange: boolean, 
+    nextOilChangeKm?: number,
+    fiscalInfo?: {
+      fiscalDocType?: FiscalDocType;
+      fiscalDocNumber?: string;
+      providerId?: string;
+      providerName?: string;
+    }
+  ): { success: boolean, message: string } {
     let success = false;
     let message = 'Veículo não encontrado.';
     this.vehicles = this.vehicles.map(v => {
@@ -772,7 +846,14 @@ export class FleetStore {
           return v;
         }
         success = true;
-        message = 'Veículo liberado da manutenção com sucesso!';
+
+        const docNumTrimmed = fiscalInfo?.fiscalDocNumber?.trim() || '';
+        const providerTrimmed = fiscalInfo?.providerName?.trim() || '';
+        const hasFiscalPending = !docNumTrimmed || !providerTrimmed;
+
+        message = hasFiscalPending
+          ? 'Veículo liberado da manutenção com pendência de informações fiscais (NF/Pedido ou Prestador ausente).'
+          : 'Veículo liberado da manutenção com sucesso!';
         
         const log: MaintenanceLog = {
           id: 'maint-log-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -783,7 +864,12 @@ export class FleetStore {
           cost: Number(cost) || 0,
           workId: v.workId,
           workName: v.workName,
-          isOilChange: isOilChange
+          isOilChange: isOilChange,
+          fiscalDocType: fiscalInfo?.fiscalDocType || 'nf',
+          fiscalDocNumber: docNumTrimmed || undefined,
+          providerId: fiscalInfo?.providerId || undefined,
+          providerName: providerTrimmed || undefined,
+          hasFiscalPending: hasFiscalPending
         };
 
         const history = v.maintenanceHistory || [];
@@ -1123,7 +1209,17 @@ export class FleetStore {
     return { success, message };
   }
 
-  public releaseEquipmentFromMaintenance(equipmentId: string, resolution: string, cost: number): { success: boolean, message: string } {
+  public releaseEquipmentFromMaintenance(
+    equipmentId: string, 
+    resolution: string, 
+    cost: number,
+    fiscalInfo?: {
+      fiscalDocType?: FiscalDocType;
+      fiscalDocNumber?: string;
+      providerId?: string;
+      providerName?: string;
+    }
+  ): { success: boolean, message: string } {
     let success = false;
     let message = 'Equipamento não encontrado.';
     this.equipments = this.equipments.map(e => {
@@ -1133,7 +1229,14 @@ export class FleetStore {
           return e;
         }
         success = true;
-        message = 'Maquinário liberado da manutenção com sucesso!';
+
+        const docNumTrimmed = fiscalInfo?.fiscalDocNumber?.trim() || '';
+        const providerTrimmed = fiscalInfo?.providerName?.trim() || '';
+        const hasFiscalPending = !docNumTrimmed || !providerTrimmed;
+
+        message = hasFiscalPending
+          ? 'Maquinário liberado da manutenção com pendência de informações fiscais (NF/Pedido ou Prestador ausente).'
+          : 'Maquinário liberado da manutenção com sucesso!';
         
         const log: MaintenanceLog = {
           id: 'maint-log-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
@@ -1143,7 +1246,12 @@ export class FleetStore {
           resolution: resolution,
           cost: Number(cost) || 0,
           workId: e.workId,
-          workName: e.workName
+          workName: e.workName,
+          fiscalDocType: fiscalInfo?.fiscalDocType || 'nf',
+          fiscalDocNumber: docNumTrimmed || undefined,
+          providerId: fiscalInfo?.providerId || undefined,
+          providerName: providerTrimmed || undefined,
+          hasFiscalPending: hasFiscalPending
         };
 
         const history = e.maintenanceHistory || [];
@@ -1441,6 +1549,360 @@ export class FleetStore {
 
     this.saveState();
     return { success: true, message: 'Autorizações atualizadas com sucesso!' };
+  }
+
+  public createSupplier(data: {
+    cnpj: string;
+    corporateName: string;
+    tradeName?: string;
+    category: SupplierCategory;
+    contactName?: string;
+    phone?: string;
+    email?: string;
+    city?: string;
+    state?: string;
+    servicesOrProducts?: string;
+    status?: 'active' | 'inactive';
+  }): { success: boolean, message: string, supplier?: Supplier } {
+    const rawCnpj = data.cnpj.replace(/\D/g, '');
+    if (!rawCnpj) {
+      return { success: false, message: 'O CNPJ é obrigatório.' };
+    }
+    if (rawCnpj.length !== 14) {
+      return { success: false, message: 'O CNPJ deve conter exatamente 14 dígitos numéricos.' };
+    }
+
+    if (!data.corporateName.trim()) {
+      return { success: false, message: 'O Nome da Razão Social é obrigatório.' };
+    }
+
+    if (!data.category || (data.category !== 'fornecedor' && data.category !== 'prestador')) {
+      return { success: false, message: 'A categoria deve ser "Fornecedor" ou "Prestador".' };
+    }
+
+    // Format CNPJ as XX.XXX.XXX/XXXX-XX
+    const formattedCnpj = rawCnpj.replace(
+      /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+      '$1.$2.$3/$4-$5'
+    );
+
+    // Check if CNPJ already registered
+    const exists = this.suppliers.some(s => s.cnpj.replace(/\D/g, '') === rawCnpj);
+    if (exists) {
+      return { success: false, message: 'Já existe um fornecedor ou prestador cadastrado com este CNPJ.' };
+    }
+
+    const newSupplier: Supplier = {
+      id: `sup-${Date.now()}`,
+      cnpj: formattedCnpj,
+      corporateName: data.corporateName.trim(),
+      tradeName: data.tradeName?.trim() || undefined,
+      category: data.category,
+      contactName: data.contactName?.trim() || undefined,
+      phone: data.phone?.trim() || undefined,
+      email: data.email?.trim() || undefined,
+      city: data.city?.trim() || undefined,
+      state: data.state?.trim().toUpperCase() || undefined,
+      servicesOrProducts: data.servicesOrProducts?.trim() || undefined,
+      status: data.status || 'active',
+      createdAt: new Date().toISOString()
+    };
+
+    this.suppliers.unshift(newSupplier);
+    this.saveState();
+    return { success: true, message: `${data.category === 'prestador' ? 'Prestador' : 'Fornecedor'} cadastrado com sucesso!`, supplier: newSupplier };
+  }
+
+  public updateSupplier(supplier: Supplier): { success: boolean, message: string } {
+    const rawCnpj = supplier.cnpj.replace(/\D/g, '');
+    if (!rawCnpj || rawCnpj.length !== 14) {
+      return { success: false, message: 'O CNPJ deve conter 14 dígitos numéricos.' };
+    }
+    if (!supplier.corporateName.trim()) {
+      return { success: false, message: 'O Nome da Razão Social é obrigatório.' };
+    }
+    if (supplier.category !== 'fornecedor' && supplier.category !== 'prestador') {
+      return { success: false, message: 'A categoria deve ser "Fornecedor" ou "Prestador".' };
+    }
+
+    const index = this.suppliers.findIndex(s => s.id === supplier.id);
+    if (index === -1) {
+      return { success: false, message: 'Fornecedor/Prestador não encontrado no sistema.' };
+    }
+
+    // Check if CNPJ is used by another supplier
+    const duplicate = this.suppliers.some(s => s.id !== supplier.id && s.cnpj.replace(/\D/g, '') === rawCnpj);
+    if (duplicate) {
+      return { success: false, message: 'Este CNPJ já está sendo utilizado por outro cadastro.' };
+    }
+
+    const formattedCnpj = rawCnpj.replace(
+      /^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,
+      '$1.$2.$3/$4-$5'
+    );
+
+    this.suppliers = this.suppliers.map(s => s.id === supplier.id ? {
+      ...s,
+      cnpj: formattedCnpj,
+      corporateName: supplier.corporateName.trim(),
+      tradeName: supplier.tradeName?.trim() || undefined,
+      category: supplier.category,
+      contactName: supplier.contactName?.trim() || undefined,
+      phone: supplier.phone?.trim() || undefined,
+      email: supplier.email?.trim() || undefined,
+      city: supplier.city?.trim() || undefined,
+      state: supplier.state?.trim().toUpperCase() || undefined,
+      servicesOrProducts: supplier.servicesOrProducts?.trim() || undefined,
+      status: supplier.status || 'active'
+    } : s);
+
+    this.saveState();
+    return { success: true, message: 'Cadastro atualizado com sucesso!' };
+  }
+
+  public toggleSupplierStatus(supplierId: string): { success: boolean, message: string } {
+    const supplier = this.suppliers.find(s => s.id === supplierId);
+    if (!supplier) return { success: false, message: 'Fornecedor/Prestador não encontrado.' };
+
+    supplier.status = supplier.status === 'active' ? 'inactive' : 'active';
+    this.suppliers = this.suppliers.map(s => s.id === supplierId ? supplier : s);
+    this.saveState();
+    return { success: true, message: `Status alterado para ${supplier.status === 'active' ? 'Ativo' : 'Inativo'}.` };
+  }
+
+  public deleteSupplier(supplierId: string): { success: boolean, message: string } {
+    const exists = this.suppliers.some(s => s.id === supplierId);
+    if (!exists) return { success: false, message: 'Fornecedor/Prestador não encontrado.' };
+
+    this.suppliers = this.suppliers.filter(s => s.id !== supplierId);
+    this.saveState();
+    supabase.from('suppliers').delete().eq('id', supplierId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for suppliers:', error);
+    });
+    return { success: true, message: 'Cadastro excluído com sucesso.' };
+  }
+
+  // --- CONTROLE DE COMBUSTÍVEL ---
+
+  public getWorkFuelBalance(workId: string): WorkFuelBalance {
+    const work = this.works.find(w => w.id === workId);
+    const workName = work?.name || 'Obra não identificada';
+
+    const inflows = this.fuelInflows.filter(i => i.workId === workId);
+    // Apenas abastecimentos consumindo o estoque da obra (dispenseType !== 'fornecedor_direto') abatem do saldo da obra
+    const dispenses = this.fuelDispenses.filter(d => d.workId === workId && d.dispenseType !== 'fornecedor_direto');
+
+    const totalInflowLiters = inflows.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
+    const totalCost = inflows.reduce((sum, item) => sum + (Number(item.totalCost) || 0), 0);
+    const averageCostPerLiter = totalInflowLiters > 0 ? (totalCost / totalInflowLiters) : 0;
+
+    const totalDispenseLiters = dispenses.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
+    const balanceLiters = Math.max(0, totalInflowLiters - totalDispenseLiters);
+
+    return {
+      workId,
+      workName,
+      totalInflowLiters: Math.round(totalInflowLiters * 100) / 100,
+      totalDispenseLiters: Math.round(totalDispenseLiters * 100) / 100,
+      balanceLiters: Math.round(balanceLiters * 100) / 100,
+      totalCost: Math.round(totalCost * 100) / 100,
+      averageCostPerLiter: Math.round(averageCostPerLiter * 100) / 100,
+      inflowCount: inflows.length,
+      dispenseCount: dispenses.length,
+    };
+  }
+
+  public getAllWorksFuelBalances(): WorkFuelBalance[] {
+    return this.works.map(work => this.getWorkFuelBalance(work.id));
+  }
+
+  public createFuelInflow(data: {
+    workId: string;
+    workName: string;
+    supplierId: string;
+    supplierName: string;
+    supplierCnpj?: string;
+    fiscalDocType: FiscalDocType;
+    fiscalDocNumber: string;
+    fuelType: string;
+    liters: number;
+    totalCost: number;
+    unitCost?: number;
+    date: string;
+    receivedBy?: string;
+    notes?: string;
+  }): { success: boolean; message: string; inflow?: FuelInflow } {
+    if (!data.workId) return { success: false, message: 'Selecione a Obra de destino do combustível.' };
+    if (!data.supplierId) return { success: false, message: 'Selecione o Fornecedor credenciado.' };
+    if (!data.fiscalDocNumber || !data.fiscalDocNumber.trim()) {
+      return { success: false, message: 'Informe o número do controle fiscal (Nota Fiscal ou Pedido de Compra).' };
+    }
+    if (!data.liters || data.liters <= 0) return { success: false, message: 'Informe uma quantidade de litros válida maior que zero.' };
+    if (data.totalCost < 0) return { success: false, message: 'O custo total não pode ser negativo.' };
+
+    const calculatedUnitCost = data.unitCost && data.unitCost > 0
+      ? data.unitCost
+      : data.liters > 0 ? (data.totalCost / data.liters) : 0;
+
+    const newInflow: FuelInflow = {
+      id: `fuel-inflow-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      workId: data.workId,
+      workName: data.workName,
+      supplierId: data.supplierId,
+      supplierName: data.supplierName,
+      supplierCnpj: data.supplierCnpj,
+      fiscalDocType: data.fiscalDocType || 'nf',
+      fiscalDocNumber: data.fiscalDocNumber.trim(),
+      fuelType: data.fuelType || 'Diesel',
+      liters: Number(data.liters),
+      totalCost: Number(data.totalCost),
+      unitCost: Math.round(calculatedUnitCost * 1000) / 1000,
+      date: data.date || new Date().toISOString().split('T')[0],
+      receivedBy: data.receivedBy?.trim() || undefined,
+      notes: data.notes?.trim() || undefined,
+      createdAt: new Date().toISOString()
+    };
+
+    this.fuelInflows = [newInflow, ...this.fuelInflows];
+    this.saveState();
+    return { success: true, message: 'Entrada de combustível cadastrada com sucesso!', inflow: newInflow };
+  }
+
+  public deleteFuelInflow(inflowId: string): { success: boolean; message: string } {
+    const exists = this.fuelInflows.some(i => i.id === inflowId);
+    if (!exists) return { success: false, message: 'Entrada não encontrada.' };
+
+    this.fuelInflows = this.fuelInflows.filter(i => i.id !== inflowId);
+    this.saveState();
+    supabase.from('fuel_inflows').delete().eq('id', inflowId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for fuel_inflows:', error);
+    });
+    return { success: true, message: 'Entrada de combustível excluída com sucesso.' };
+  }
+
+  public createFuelDispense(data: {
+    dispenseType?: FuelDispenseType;
+    workId?: string;
+    workName?: string;
+    supplierId?: string;
+    supplierName?: string;
+    supplierCnpj?: string;
+    fiscalDocType?: FiscalDocType;
+    fiscalDocNumber?: string;
+    vehicleId: string;
+    vehiclePlate: string;
+    vehicleModel: string;
+    fuelType: string;
+    liters: number;
+    currentKmOrHours?: number;
+    unitCost?: number;
+    totalCost?: number;
+    driverId?: string;
+    driverName?: string;
+    date: string;
+    notes?: string;
+  }): { success: boolean; message: string; dispense?: FuelDispense } {
+    const isDirectSupplier = data.dispenseType === 'fornecedor_direto';
+
+    if (isDirectSupplier) {
+      if (!data.supplierId) return { success: false, message: 'Selecione o Fornecedor/Posto para o abastecimento direto.' };
+    } else {
+      if (!data.workId) return { success: false, message: 'Selecione a Obra de origem para debitar o combustível.' };
+    }
+
+    if (!data.vehicleId) return { success: false, message: 'Selecione o veículo a ser abastecido.' };
+    if (!data.liters || data.liters <= 0) return { success: false, message: 'Informe a quantidade em litros abastecida.' };
+
+    let calculatedCost = 0;
+    let finalUnitCost = data.unitCost;
+    let finalTotalCost = data.totalCost;
+
+    if (isDirectSupplier) {
+      if (finalTotalCost && finalTotalCost > 0) {
+        finalUnitCost = data.liters > 0 ? (finalTotalCost / data.liters) : 0;
+        calculatedCost = finalTotalCost;
+      } else if (finalUnitCost && finalUnitCost > 0) {
+        finalTotalCost = Math.round((finalUnitCost * data.liters) * 100) / 100;
+        calculatedCost = finalTotalCost;
+      }
+    } else if (data.workId) {
+      const balance = this.getWorkFuelBalance(data.workId);
+      finalUnitCost = balance.averageCostPerLiter;
+      calculatedCost = Math.round((balance.averageCostPerLiter * data.liters) * 100) / 100;
+      finalTotalCost = calculatedCost;
+    }
+
+    const newDispense: FuelDispense = {
+      id: `fuel-dispense-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      dispenseType: data.dispenseType || 'obra',
+      workId: data.workId || undefined,
+      workName: data.workName || (isDirectSupplier ? 'Abastecimento Externo' : undefined),
+      supplierId: data.supplierId || undefined,
+      supplierName: data.supplierName || undefined,
+      supplierCnpj: data.supplierCnpj || undefined,
+      fiscalDocType: data.fiscalDocType || undefined,
+      fiscalDocNumber: data.fiscalDocNumber?.trim() || undefined,
+      vehicleId: data.vehicleId,
+      vehiclePlate: data.vehiclePlate,
+      vehicleModel: data.vehicleModel,
+      fuelType: data.fuelType || 'Diesel',
+      liters: Number(data.liters),
+      currentKmOrHours: data.currentKmOrHours ? Number(data.currentKmOrHours) : undefined,
+      unitCost: finalUnitCost ? Math.round(Number(finalUnitCost) * 1000) / 1000 : undefined,
+      totalCost: finalTotalCost ? Math.round(Number(finalTotalCost) * 100) / 100 : undefined,
+      calculatedCost: Math.round(calculatedCost * 100) / 100,
+      driverId: data.driverId,
+      driverName: data.driverName?.trim() || undefined,
+      date: data.date || new Date().toISOString(),
+      notes: data.notes?.trim() || undefined,
+      createdAt: new Date().toISOString()
+    };
+
+    // Update vehicle current KM if provided and higher
+    const vehicle = this.vehicles.find(v => v.id === data.vehicleId);
+    if (vehicle) {
+      if (data.currentKmOrHours && data.currentKmOrHours > vehicle.currentKm) {
+        vehicle.currentKm = Number(data.currentKmOrHours);
+      }
+      // Ensure vehicle has work association if missing and workId was provided
+      if (!vehicle.workId && data.workId && data.workName) {
+        vehicle.workId = data.workId;
+        vehicle.workName = data.workName;
+      }
+    }
+
+    this.fuelDispenses = [newDispense, ...this.fuelDispenses];
+    this.saveState();
+
+    let warningText = '';
+    if (!isDirectSupplier && data.workId) {
+      const balance = this.getWorkFuelBalance(data.workId);
+      if (data.liters > balance.balanceLiters) {
+        warningText = ` (Atenção: abastecimento excedeu o saldo prévio de estoque da obra)`;
+      }
+    }
+
+    const typeDesc = isDirectSupplier
+      ? `diretamente no fornecedor ${data.supplierName || ''}`
+      : `com estoque da obra ${data.workName || ''}`;
+
+    return { 
+      success: true, 
+      message: `Abastecimento de ${data.liters} L registrado com sucesso (${typeDesc})!${warningText}`, 
+      dispense: newDispense 
+    };
+  }
+
+  public deleteFuelDispense(dispenseId: string): { success: boolean; message: string } {
+    const exists = this.fuelDispenses.some(d => d.id === dispenseId);
+    if (!exists) return { success: false, message: 'Abastecimento não encontrado.' };
+
+    this.fuelDispenses = this.fuelDispenses.filter(d => d.id !== dispenseId);
+    this.saveState();
+    supabase.from('fuel_dispenses').delete().eq('id', dispenseId).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for fuel_dispenses:', error);
+    });
+    return { success: true, message: 'Abastecimento excluído com sucesso.' };
   }
 }
 export default FleetStore;

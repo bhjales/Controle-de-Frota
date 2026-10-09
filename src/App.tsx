@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Truck, Shield, Key, FileCheck, Check, AlertCircle, HelpCircle, UserCheck } from 'lucide-react';
 import { FleetStore } from './store/fleetStore';
-import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { AdminVehicles } from './components/AdminVehicles';
 import { AdminDrivers } from './components/AdminDrivers';
 import { DriverTrips } from './components/DriverTrips';
@@ -10,6 +10,8 @@ import { EquipmentControl } from './components/EquipmentControl';
 import { ManagerDashboard } from './components/ManagerDashboard';
 import { AdminWorks } from './components/AdminWorks';
 import { AdminEquipmentTypes } from './components/AdminEquipmentTypes';
+import { AdminSuppliers } from './components/AdminSuppliers';
+import { FuelManagement } from './components/FuelManagement';
 
 export default function App() {
   const store = FleetStore.getInstance();
@@ -24,6 +26,9 @@ export default function App() {
   const [works, setWorks] = useState(store.works);
   const [equipmentTypes, setEquipmentTypes] = useState(store.equipmentTypes);
   const [vehicleCategories, setVehicleCategories] = useState(store.vehicleCategories);
+  const [suppliers, setSuppliers] = useState(store.suppliers);
+  const [fuelInflows, setFuelInflows] = useState(store.fuelInflows);
+  const [fuelDispenses, setFuelDispenses] = useState(store.fuelDispenses);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState('my-trips');
@@ -57,6 +62,9 @@ export default function App() {
       setWorks([...store.works]);
       setEquipmentTypes([...store.equipmentTypes]);
       setVehicleCategories([...store.vehicleCategories]);
+      setSuppliers([...store.suppliers]);
+      setFuelInflows([...store.fuelInflows]);
+      setFuelDispenses([...store.fuelDispenses]);
     });
     return () => unsubscribe();
   }, [store]);
@@ -182,19 +190,58 @@ export default function App() {
     setAuthSuccess('');
   };
 
+  const getTabLabel = (tab: string) => {
+    switch (tab) {
+      case 'my-trips': return 'Minha Viagem';
+      case 'manager-dashboard': return 'Dashboard Resumo';
+      case 'vehicles': return 'Veículos';
+      case 'equipments': return 'Maquinários / Horímetro';
+      case 'drivers': return 'Usuários';
+      case 'categories': return 'Categorias';
+      case 'history': return 'Relatórios de Viagens';
+      case 'works': return 'Obras';
+      case 'suppliers': return 'Fornecedores';
+      case 'fuel': return 'Controle de Combustível';
+      default: return 'Painel Geral';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#1E293B] font-sans flex flex-col justify-between">
+    <div className={`min-h-screen bg-[#F8FAFC] text-[#1E293B] font-sans ${currentUser ? 'flex flex-col md:flex-row' : 'flex flex-col justify-between'}`}>
       
-      {/* Top Banner & Navigation */}
-      <Navbar
+      {/* Lateral Menu / Sidebar */}
+      <Sidebar
         currentUser={currentUser}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onLogout={handleLogout}
       />
 
-      {/* Main Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 pt-20 pb-8 sm:px-6 lg:px-8">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {currentUser && (
+          <header className="hidden md:flex items-center justify-between border-b border-slate-200 bg-white/90 backdrop-blur-md px-6 py-3.5 sticky top-0 z-20 shadow-xs">
+            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+              <span className="font-semibold text-slate-700 font-display">FrotaControl</span>
+              <span>/</span>
+              <span className="font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                {getTabLabel(activeTab)}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                Operacional Ativo
+              </span>
+              <span className="font-mono text-[11px] text-slate-400">
+                {new Date().toLocaleDateString('pt-BR')}
+              </span>
+            </div>
+          </header>
+        )}
+
+        {/* Main Body */}
+        <main className={`flex-1 w-full ${currentUser ? 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6' : 'max-w-md mx-auto px-4 py-8'}`}>
         
         {!currentUser ? (
           /* ========================================================
@@ -494,8 +541,30 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'suppliers' && currentUser?.role !== 'driver' && (
+              <AdminSuppliers
+                currentUser={currentUser}
+                suppliers={suppliers}
+                store={store}
+              />
+            )}
+
+            {activeTab === 'fuel' && currentUser?.role !== 'driver' && (
+              <FuelManagement
+                currentUser={currentUser}
+                works={works}
+                vehicles={vehicles}
+                suppliers={suppliers}
+                fuelInflows={fuelInflows}
+                fuelDispenses={fuelDispenses}
+                users={users}
+                store={store}
+              />
+            )}
+
             {/* Safety Fallback: if user tries to breach restricted tab by state hacking */}
             {(((activeTab === 'vehicles' || activeTab === 'drivers') && currentUser.role !== 'admin') ||
+              ((activeTab === 'suppliers' || activeTab === 'fuel') && currentUser.role === 'driver') ||
               ((activeTab === 'my-trips' || activeTab === 'equipments') && currentUser.role === 'gerencial')) && (
               <div className="p-8 bg-red-50 border border-red-200 text-red-800 rounded-3xl text-center space-y-2 animate-bounce">
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
@@ -534,6 +603,7 @@ export default function App() {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 }
