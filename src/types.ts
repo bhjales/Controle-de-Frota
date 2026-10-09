@@ -232,6 +232,17 @@ export interface FuelDispense {
   createdAt: string;
 }
 
+export interface FuelTypeMetric {
+  fuelType: string;
+  inflowLiters: number;
+  dispenseLiters: number;
+  balanceLiters: number;
+  totalCost: number;
+  averageCostPerLiter: number;
+  inflowCount: number;
+  dispenseCount: number;
+}
+
 export interface WorkFuelBalance {
   workId: string;
   workName: string;
@@ -242,4 +253,8 @@ export interface WorkFuelBalance {
   averageCostPerLiter: number;
   inflowCount: number;
   dispenseCount: number;
+  diesel: FuelTypeMetric;
+  gasolina: FuelTypeMetric;
+  byFuelType?: Record<string, FuelTypeMetric>;
 }
+

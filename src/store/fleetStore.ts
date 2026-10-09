@@ -1699,6 +1699,28 @@ export class FleetStore {
     const totalDispenseLiters = dispenses.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
     const balanceLiters = Math.max(0, totalInflowLiters - totalDispenseLiters);
 
+    // Differentiate by fuel type: Diesel vs Gasolina
+    const isDiesel = (t?: string) => (t || '').toLowerCase().includes('diesel');
+    const isGasolina = (t?: string) => (t || '').toLowerCase().includes('gasolina');
+
+    // Diesel metrics
+    const dieselInflows = inflows.filter(i => isDiesel(i.fuelType));
+    const dieselDispenses = dispenses.filter(d => isDiesel(d.fuelType));
+    const dieselInflowLiters = dieselInflows.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
+    const dieselTotalCost = dieselInflows.reduce((sum, item) => sum + (Number(item.totalCost) || 0), 0);
+    const dieselDispenseLiters = dieselDispenses.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
+    const dieselBalanceLiters = Math.max(0, dieselInflowLiters - dieselDispenseLiters);
+    const dieselAvgCost = dieselInflowLiters > 0 ? (dieselTotalCost / dieselInflowLiters) : 0;
+
+    // Gasolina metrics
+    const gasolinaInflows = inflows.filter(i => isGasolina(i.fuelType));
+    const gasolinaDispenses = dispenses.filter(d => isGasolina(d.fuelType));
+    const gasolinaInflowLiters = gasolinaInflows.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
+    const gasolinaTotalCost = gasolinaInflows.reduce((sum, item) => sum + (Number(item.totalCost) || 0), 0);
+    const gasolinaDispenseLiters = gasolinaDispenses.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
+    const gasolinaBalanceLiters = Math.max(0, gasolinaInflowLiters - gasolinaDispenseLiters);
+    const gasolinaAvgCost = gasolinaInflowLiters > 0 ? (gasolinaTotalCost / gasolinaInflowLiters) : 0;
+
     return {
       workId,
       workName,
@@ -1709,6 +1731,26 @@ export class FleetStore {
       averageCostPerLiter: Math.round(averageCostPerLiter * 100) / 100,
       inflowCount: inflows.length,
       dispenseCount: dispenses.length,
+      diesel: {
+        fuelType: 'Diesel',
+        inflowLiters: Math.round(dieselInflowLiters * 100) / 100,
+        dispenseLiters: Math.round(dieselDispenseLiters * 100) / 100,
+        balanceLiters: Math.round(dieselBalanceLiters * 100) / 100,
+        totalCost: Math.round(dieselTotalCost * 100) / 100,
+        averageCostPerLiter: Math.round(dieselAvgCost * 100) / 100,
+        inflowCount: dieselInflows.length,
+        dispenseCount: dieselDispenses.length,
+      },
+      gasolina: {
+        fuelType: 'Gasolina',
+        inflowLiters: Math.round(gasolinaInflowLiters * 100) / 100,
+        dispenseLiters: Math.round(gasolinaDispenseLiters * 100) / 100,
+        balanceLiters: Math.round(gasolinaBalanceLiters * 100) / 100,
+        totalCost: Math.round(gasolinaTotalCost * 100) / 100,
+        averageCostPerLiter: Math.round(gasolinaAvgCost * 100) / 100,
+        inflowCount: gasolinaInflows.length,
+        dispenseCount: gasolinaDispenses.length,
+      }
     };
   }
 
@@ -1827,8 +1869,12 @@ export class FleetStore {
       }
     } else if (data.workId) {
       const balance = this.getWorkFuelBalance(data.workId);
-      finalUnitCost = balance.averageCostPerLiter;
-      calculatedCost = Math.round((balance.averageCostPerLiter * data.liters) * 100) / 100;
+      const isGas = (data.fuelType || '').toLowerCase().includes('gasolina');
+      const fuelMetric = isGas ? balance.gasolina : balance.diesel;
+      finalUnitCost = fuelMetric.averageCostPerLiter > 0 
+        ? fuelMetric.averageCostPerLiter 
+        : balance.averageCostPerLiter > 0 ? balance.averageCostPerLiter : (isGas ? 5.89 : 6.15);
+      calculatedCost = Math.round((finalUnitCost * data.liters) * 100) / 100;
       finalTotalCost = calculatedCost;
     }
 

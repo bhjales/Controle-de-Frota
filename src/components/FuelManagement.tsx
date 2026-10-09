@@ -21,7 +21,9 @@ import {
   Clock,
   Sparkles,
   Info,
-  Store
+  Store,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   User, 
@@ -35,6 +37,7 @@ import {
   WorkFuelBalance 
 } from '../types';
 import { FleetStore } from '../store/fleetStore';
+import { exportFuelReportPDF, exportFuelConsolidatedCSV } from '../utils/fuelReports';
 
 interface FuelManagementProps {
   currentUser: User | null;
@@ -113,6 +116,42 @@ export function FuelManagement({
     }, 5000);
   };
 
+  const handleExportPDF = () => {
+    try {
+      exportFuelReportPDF({
+        fuelInflows,
+        fuelDispenses,
+        works,
+        vehicles,
+        suppliers,
+        currentUser,
+        selectedWorkId: selectedWorkFilter === 'all' ? undefined : selectedWorkFilter
+      });
+      showNotification('success', 'Relatório gerencial de combustíveis em PDF gerado com sucesso!');
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Erro ao gerar relatório em PDF.');
+    }
+  };
+
+  const handleExportCSV = () => {
+    try {
+      exportFuelConsolidatedCSV({
+        fuelInflows,
+        fuelDispenses,
+        works,
+        vehicles,
+        suppliers,
+        currentUser,
+        selectedWorkId: selectedWorkFilter === 'all' ? undefined : selectedWorkFilter
+      });
+      showNotification('success', 'Planilha detalhada de combustíveis exportada com sucesso!');
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Erro ao exportar planilha CSV.');
+    }
+  };
+
   // Pre-calculated metrics for all works
   const workBalances = useMemo<WorkFuelBalance[]>(() => {
     return works.map(w => store.getWorkFuelBalance(w.id));
@@ -120,12 +159,33 @@ export function FuelManagement({
 
   // Overall KPIs
   const overallKPIs = useMemo(() => {
+    const isDiesel = (t?: string) => (t || '').toLowerCase().includes('diesel');
+    const isGasolina = (t?: string) => (t || '').toLowerCase().includes('gasolina');
+
     const totalInflowLiters = fuelInflows.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
     const totalInflowCost = fuelInflows.reduce((sum, item) => sum + (Number(item.totalCost) || 0), 0);
     const totalDispenseLiters = fuelDispenses.reduce((sum, item) => sum + (Number(item.liters) || 0), 0);
     const totalRemainingLiters = Math.max(0, totalInflowLiters - totalDispenseLiters);
     const avgCostPerLiter = totalInflowLiters > 0 ? totalInflowCost / totalInflowLiters : 0;
     const remainingEstimatedValue = totalRemainingLiters * avgCostPerLiter;
+
+    // Diesel breakdown
+    const dieselInflows = fuelInflows.filter(i => isDiesel(i.fuelType));
+    const dieselDispenses = fuelDispenses.filter(d => isDiesel(d.fuelType));
+    const dieselInflowLiters = dieselInflows.reduce((s, i) => s + (Number(i.liters) || 0), 0);
+    const dieselInflowCost = dieselInflows.reduce((s, i) => s + (Number(i.totalCost) || 0), 0);
+    const dieselDispenseLiters = dieselDispenses.reduce((s, d) => s + (Number(d.liters) || 0), 0);
+    const dieselRemainingLiters = Math.max(0, dieselInflowLiters - dieselDispenseLiters);
+    const dieselAvgCost = dieselInflowLiters > 0 ? dieselInflowCost / dieselInflowLiters : 0;
+
+    // Gasolina breakdown
+    const gasolinaInflows = fuelInflows.filter(i => isGasolina(i.fuelType));
+    const gasolinaDispenses = fuelDispenses.filter(d => isGasolina(d.fuelType));
+    const gasolinaInflowLiters = gasolinaInflows.reduce((s, i) => s + (Number(i.liters) || 0), 0);
+    const gasolinaInflowCost = gasolinaInflows.reduce((s, i) => s + (Number(i.totalCost) || 0), 0);
+    const gasolinaDispenseLiters = gasolinaDispenses.reduce((s, d) => s + (Number(d.liters) || 0), 0);
+    const gasolinaRemainingLiters = Math.max(0, gasolinaInflowLiters - gasolinaDispenseLiters);
+    const gasolinaAvgCost = gasolinaInflowLiters > 0 ? gasolinaInflowCost / gasolinaInflowLiters : 0;
 
     return {
       totalInflowLiters,
@@ -136,7 +196,21 @@ export function FuelManagement({
       remainingEstimatedValue,
       inflowsCount: fuelInflows.length,
       dispensesCount: fuelDispenses.length,
-      activeWorksCount: works.filter(w => w.status === 'active').length
+      activeWorksCount: works.filter(w => w.status === 'active').length,
+      diesel: {
+        inflowLiters: dieselInflowLiters,
+        inflowCost: dieselInflowCost,
+        dispenseLiters: dieselDispenseLiters,
+        remainingLiters: dieselRemainingLiters,
+        avgCostPerLiter: dieselAvgCost,
+      },
+      gasolina: {
+        inflowLiters: gasolinaInflowLiters,
+        inflowCost: gasolinaInflowCost,
+        dispenseLiters: gasolinaDispenseLiters,
+        remainingLiters: gasolinaRemainingLiters,
+        avgCostPerLiter: gasolinaAvgCost,
+      }
     };
   }, [fuelInflows, fuelDispenses, works]);
 
@@ -472,64 +546,142 @@ export function FuelManagement({
               <Store className="w-4 h-4" />
               Abastecer no Fornecedor
             </button>
+
+            {/* Export Actions */}
+            <div className="flex items-center gap-2">
+              <button
+                id="btn_export_fuel_mgmt_pdf"
+                onClick={handleExportPDF}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 hover:text-white font-semibold text-sm shadow-md transition-all duration-200 cursor-pointer active:scale-95"
+                title="Exportar Relatório Consolidado de Combustíveis em PDF"
+              >
+                <Download className="w-4 h-4 text-amber-400" />
+                Relatório PDF
+              </button>
+              <button
+                id="btn_export_fuel_mgmt_csv"
+                onClick={handleExportCSV}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-300 hover:text-white font-semibold text-sm shadow-md transition-all duration-200 cursor-pointer active:scale-95"
+                title="Exportar Planilha Excel / CSV com Balanço e Histórico"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                Planilha CSV
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Top KPIs Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-slate-800/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-6 pt-6 border-t border-slate-800/80">
           {/* Card 1: Saldo Restante */}
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors">
-            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
-              <span>Saldo em Tanque</span>
-              <Droplet className="w-4 h-4 text-emerald-400" />
+          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+                <span>Saldo Total em Tanque</span>
+                <Droplet className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="text-xl sm:text-2xl font-bold text-emerald-400">
+                {overallKPIs.totalRemainingLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-emerald-300">L</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                Estoque avaliado em ~ R$ {overallKPIs.remainingEstimatedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-emerald-400">
-              {overallKPIs.totalRemainingLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-emerald-300">L</span>
-            </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Estoque avaliado em ~ R$ {overallKPIs.remainingEstimatedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+
+            {/* Differentiated balance pills */}
+            <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-slate-700/60 text-[11px]">
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-sky-950/60 border border-sky-800/40 text-sky-300">
+                <span>🛢️ Diesel:</span>
+                <strong className="font-mono">{overallKPIs.diesel.remainingLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</strong>
+              </div>
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300">
+                <span>⛽ Gasol.:</span>
+                <strong className="font-mono">{overallKPIs.gasolina.remainingLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</strong>
+              </div>
             </div>
           </div>
 
           {/* Card 2: Total Entradas */}
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors">
-            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
-              <span>Total Comprado (Entradas)</span>
-              <ArrowDownLeft className="w-4 h-4 text-blue-400" />
+          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+                <span>Total Comprado (Entradas)</span>
+                <ArrowDownLeft className="w-4 h-4 text-blue-400" />
+              </div>
+              <div className="text-xl sm:text-2xl font-bold text-white">
+                {overallKPIs.totalInflowLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-slate-400">L</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                {overallKPIs.inflowsCount} registro(s) (R$ {overallKPIs.totalInflowCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+              </div>
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-white">
-              {overallKPIs.totalInflowLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-slate-400">L</span>
-            </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              {overallKPIs.inflowsCount} registro(s) fiscais (R$ {overallKPIs.totalInflowCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+
+            {/* Differentiated inflow pills */}
+            <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-slate-700/60 text-[11px]">
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-sky-950/60 border border-sky-800/40 text-sky-300">
+                <span>🛢️ Diesel:</span>
+                <strong className="font-mono">{overallKPIs.diesel.inflowLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</strong>
+              </div>
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300">
+                <span>⛽ Gasol.:</span>
+                <strong className="font-mono">{overallKPIs.gasolina.inflowLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</strong>
+              </div>
             </div>
           </div>
 
           {/* Card 3: Total Consumido */}
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors">
-            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
-              <span>Consumo da Frota</span>
-              <Fuel className="w-4 h-4 text-amber-400" />
+          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+                <span>Consumo da Frota</span>
+                <Fuel className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="text-xl sm:text-2xl font-bold text-white">
+                {overallKPIs.totalDispenseLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-slate-400">L</span>
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                {overallKPIs.dispensesCount} abastecimento(s) realizados
+              </div>
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-white">
-              {overallKPIs.totalDispenseLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} <span className="text-sm font-normal text-slate-400">L</span>
-            </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              {overallKPIs.dispensesCount} abastecimento(s) realizados
+
+            {/* Differentiated consumption pills */}
+            <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-slate-700/60 text-[11px]">
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-sky-950/60 border border-sky-800/40 text-sky-300">
+                <span>🛢️ Diesel:</span>
+                <strong className="font-mono">{overallKPIs.diesel.dispenseLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</strong>
+              </div>
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300">
+                <span>⛽ Gasol.:</span>
+                <strong className="font-mono">{overallKPIs.gasolina.dispenseLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</strong>
+              </div>
             </div>
           </div>
 
           {/* Card 4: Custo Médio */}
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors">
-            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
-              <span>Custo Médio / Litro</span>
-              <DollarSign className="w-4 h-4 text-purple-400" />
+          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3.5 sm:p-4 hover:border-slate-600 transition-colors flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+                <span>Custo Médio / Litro</span>
+                <DollarSign className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="text-xl sm:text-2xl font-bold text-white">
+                R$ {overallKPIs.avgCostPerLiter > 0 ? overallKPIs.avgCostPerLiter.toFixed(3) : '0,000'}
+              </div>
+              <div className="text-[11px] text-slate-400 mt-0.5">
+                {overallKPIs.activeWorksCount} obra(s) monitoradas
+              </div>
             </div>
-            <div className="text-xl sm:text-2xl font-bold text-white">
-              R$ {overallKPIs.avgCostPerLiter > 0 ? overallKPIs.avgCostPerLiter.toFixed(3) : '0,000'}
-            </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              {overallKPIs.activeWorksCount} obra(s) monitoradas
+
+            {/* Differentiated unit price pills */}
+            <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-slate-700/60 text-[11px]">
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-sky-950/60 border border-sky-800/40 text-sky-300">
+                <span>🛢️ Diesel:</span>
+                <strong className="font-mono">R$ {overallKPIs.diesel.avgCostPerLiter > 0 ? overallKPIs.diesel.avgCostPerLiter.toFixed(2) : '-'}</strong>
+              </div>
+              <div className="flex-1 flex items-center justify-between px-2 py-0.5 rounded bg-amber-950/60 border border-amber-800/40 text-amber-300">
+                <span>⛽ Gasol.:</span>
+                <strong className="font-mono">R$ {overallKPIs.gasolina.avgCostPerLiter > 0 ? overallKPIs.gasolina.avgCostPerLiter.toFixed(2) : '-'}</strong>
+              </div>
             </div>
           </div>
         </div>
@@ -693,67 +845,117 @@ export function FuelManagement({
                         )}
                       </div>
 
-                      {/* Main Balance Display */}
-                      <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 my-3">
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-xs text-slate-400 font-medium">Saldo Atual Restante:</span>
-                          <span className="text-xs text-slate-500">
-                            {percentage}% do total abastecido
-                          </span>
-                        </div>
-                        <div className="flex items-baseline gap-2 mt-1">
-                          <span className={`text-2xl font-black tracking-tight ${
-                            isZero 
-                              ? 'text-rose-400' 
-                              : isLow 
-                              ? 'text-amber-400' 
-                              : 'text-emerald-400'
-                          }`}>
-                            {balance.balanceLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-400 uppercase">Litros</span>
-                        </div>
-
-                        {/* Progress Bar of Fuel Tank */}
-                        <div className="w-full bg-slate-800/90 rounded-full h-2.5 mt-2.5 overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isZero 
-                                ? 'bg-rose-500 w-1' 
-                                : isLow 
-                                ? 'bg-gradient-to-r from-amber-500 to-amber-400' 
-                                : 'bg-gradient-to-r from-teal-500 to-emerald-500'
-                            }`}
-                            style={{ width: `${Math.max(percentage, isZero ? 2 : 0)}%` }}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-850">
-                          <span>Custo Médio: <strong className="text-slate-200">R$ {balance.averageCostPerLiter > 0 ? balance.averageCostPerLiter.toFixed(3) : '0,000'}/L</strong></span>
-                          <span>Em estoque: <strong className="text-slate-200">R$ {(balance.balanceLiters * balance.averageCostPerLiter).toFixed(2)}</strong></span>
-                        </div>
+                      {/* Main Balance Summary Header */}
+                      <div className="flex items-center justify-between text-xs px-1 text-slate-400">
+                        <span>Saldo Total em Tanque:</span>
+                        <span className="font-bold text-white font-mono">
+                          {balance.balanceLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+                        </span>
                       </div>
 
-                      {/* Sub-metrics */}
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-slate-800/40 rounded-lg p-2 border border-slate-800">
-                          <span className="text-slate-400 text-[10px] block">Total Recebido (Entradas)</span>
-                          <span className="font-semibold text-slate-200">
-                            {balance.totalInflowLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
-                          </span>
-                          <span className="text-[10px] text-slate-500 block">
-                            {balance.inflowCount} entrada(s)
-                          </span>
-                        </div>
-                        <div className="bg-slate-800/40 rounded-lg p-2 border border-slate-800">
-                          <span className="text-slate-400 text-[10px] block">Consumo (Abastecido)</span>
-                          <span className="font-semibold text-slate-200">
-                            {balance.totalDispenseLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
-                          </span>
-                          <span className="text-[10px] text-slate-500 block">
-                            {balance.dispenseCount} abastecimento(s)
-                          </span>
-                        </div>
+                      {/* Dual Tanks: Diesel & Gasolina */}
+                      <div className="space-y-2.5 my-2.5">
+                        {/* Tanque 1: Diesel */}
+                        {(() => {
+                          const dieselPct = balance.diesel.inflowLiters > 0 
+                            ? Math.min(100, Math.round((balance.diesel.balanceLiters / balance.diesel.inflowLiters) * 100))
+                            : 0;
+                          return (
+                            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                              <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-1.5 font-bold text-sky-300">
+                                  <Droplet className="w-3.5 h-3.5 text-sky-400" />
+                                  <span>Tanque Diesel</span>
+                                </div>
+                                <span className="text-[11px] font-mono font-semibold text-slate-400">
+                                  {balance.diesel.inflowLiters > 0 ? `${dieselPct}% do estoque` : 'Sem entradas'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-baseline justify-between mt-1.5">
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className={`text-xl font-black font-mono tracking-tight ${
+                                    balance.diesel.balanceLiters <= 0 && balance.diesel.inflowLiters > 0 
+                                      ? 'text-rose-400' 
+                                      : dieselPct < 20 && balance.diesel.balanceLiters > 0 
+                                      ? 'text-amber-400' 
+                                      : 'text-sky-300'
+                                  }`}>
+                                    {balance.diesel.balanceLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
+                                  </span>
+                                  <span className="text-[10px] uppercase font-bold text-slate-400">L disp.</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  R$ {balance.diesel.averageCostPerLiter > 0 ? balance.diesel.averageCostPerLiter.toFixed(2) : '0,00'}/L
+                                </span>
+                              </div>
+
+                              {/* Progress Bar Diesel */}
+                              <div className="w-full bg-slate-800/90 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div 
+                                  className="h-full rounded-full bg-gradient-to-r from-sky-500 to-blue-500 transition-all duration-500"
+                                  style={{ width: `${Math.max(dieselPct, balance.diesel.balanceLiters > 0 ? 3 : 0)}%` }}
+                                />
+                              </div>
+
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1.5 pt-1 border-t border-slate-850 font-mono">
+                                <span>Entradas: {balance.diesel.inflowLiters.toLocaleString('pt-BR')} L</span>
+                                <span className="text-amber-300/90">Consumo: {balance.diesel.dispenseLiters.toLocaleString('pt-BR')} L</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Tanque 2: Gasolina */}
+                        {(() => {
+                          const gasolinaPct = balance.gasolina.inflowLiters > 0 
+                            ? Math.min(100, Math.round((balance.gasolina.balanceLiters / balance.gasolina.inflowLiters) * 100))
+                            : 0;
+                          return (
+                            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3">
+                              <div className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                                  <Fuel className="w-3.5 h-3.5 text-amber-400" />
+                                  <span>Tanque Gasolina</span>
+                                </div>
+                                <span className="text-[11px] font-mono font-semibold text-slate-400">
+                                  {balance.gasolina.inflowLiters > 0 ? `${gasolinaPct}% do estoque` : 'Sem entradas'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-baseline justify-between mt-1.5">
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className={`text-xl font-black font-mono tracking-tight ${
+                                    balance.gasolina.balanceLiters <= 0 && balance.gasolina.inflowLiters > 0 
+                                      ? 'text-rose-400' 
+                                      : gasolinaPct < 20 && balance.gasolina.balanceLiters > 0 
+                                      ? 'text-amber-400' 
+                                      : 'text-amber-300'
+                                  }`}>
+                                    {balance.gasolina.balanceLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
+                                  </span>
+                                  <span className="text-[10px] uppercase font-bold text-slate-400">L disp.</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  R$ {balance.gasolina.averageCostPerLiter > 0 ? balance.gasolina.averageCostPerLiter.toFixed(2) : '0,00'}/L
+                                </span>
+                              </div>
+
+                              {/* Progress Bar Gasolina */}
+                              <div className="w-full bg-slate-800/90 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div 
+                                  className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                                  style={{ width: `${Math.max(gasolinaPct, balance.gasolina.balanceLiters > 0 ? 3 : 0)}%` }}
+                                />
+                              </div>
+
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1.5 pt-1 border-t border-slate-850 font-mono">
+                                <span>Entradas: {balance.gasolina.inflowLiters.toLocaleString('pt-BR')} L</span>
+                                <span className="text-amber-300/90">Consumo: {balance.gasolina.dispenseLiters.toLocaleString('pt-BR')} L</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Assigned vehicles indicator */}
@@ -826,6 +1028,34 @@ export function FuelManagement({
               <Plus className="w-4 h-4" />
               Nova Entrada Fiscal
             </button>
+          </div>
+
+          {/* Subtotal bar differentiated by fuel type */}
+          <div className="px-4 py-2.5 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Total Filtrado:</span>
+              <span className="font-black text-white font-mono">
+                {filteredInflows.reduce((s, i) => s + (Number(i.liters) || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+              </span>
+              <span className="text-slate-500 font-mono text-[11px]">
+                (R$ {filteredInflows.reduce((s, i) => s + (Number(i.totalCost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/60 border border-sky-800/40 text-sky-300 font-semibold text-[11px]">
+                <span>🛢️ Entradas Diesel:</span>
+                <strong className="font-mono text-white">
+                  {filteredInflows.filter(i => (i.fuelType || '').toLowerCase().includes('diesel')).reduce((s, i) => s + (Number(i.liters) || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+                </strong>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/40 text-amber-300 font-semibold text-[11px]">
+                <span>⛽ Entradas Gasolina:</span>
+                <strong className="font-mono text-white">
+                  {filteredInflows.filter(i => (i.fuelType || '').toLowerCase().includes('gasolina')).reduce((s, i) => s + (Number(i.liters) || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+                </strong>
+              </div>
+            </div>
           </div>
 
           {filteredInflows.length === 0 ? (
@@ -956,6 +1186,34 @@ export function FuelManagement({
               <Plus className="w-4 h-4" />
               Novo Abastecimento
             </button>
+          </div>
+
+          {/* Subtotal bar differentiated by fuel type */}
+          <div className="px-4 py-2.5 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-medium">Consumo Total Filtrado:</span>
+              <span className="font-black text-white font-mono">
+                {filteredDispenses.reduce((s, d) => s + (Number(d.liters) || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+              </span>
+              <span className="text-slate-500 font-mono text-[11px]">
+                (R$ {filteredDispenses.reduce((s, d) => s + (Number(d.totalCost || d.calculatedCost) || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-950/60 border border-sky-800/40 text-sky-300 font-semibold text-[11px]">
+                <span>🛢️ Consumo Diesel:</span>
+                <strong className="font-mono text-white">
+                  {filteredDispenses.filter(d => (d.fuelType || '').toLowerCase().includes('diesel')).reduce((s, d) => s + (Number(d.liters) || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+                </strong>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/40 text-amber-300 font-semibold text-[11px]">
+                <span>⛽ Consumo Gasolina:</span>
+                <strong className="font-mono text-white">
+                  {filteredDispenses.filter(d => (d.fuelType || '').toLowerCase().includes('gasolina')).reduce((s, d) => s + (Number(d.liters) || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L
+                </strong>
+              </div>
+            </div>
           </div>
 
           {filteredDispenses.length === 0 ? (
@@ -1448,24 +1706,73 @@ export function FuelManagement({
                     ))}
                   </select>
 
-                  {/* Saldo visual da Obra selecionada */}
+                  {/* Saldo visual da Obra selecionada diferenciado por combustível */}
                   {currentDispenseWorkBalance && (
-                    <div className={`mt-2 p-3 rounded-xl border flex items-center justify-between text-xs ${
-                      currentDispenseWorkBalance.balanceLiters <= 0
-                        ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-                        : currentDispenseWorkBalance.balanceLiters < 200
-                        ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                        : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <Droplet className="w-4 h-4 flex-shrink-0" />
-                        <span>
-                          Saldo em Tanque: <strong className="font-bold">{currentDispenseWorkBalance.balanceLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</strong>
-                        </span>
+                    <div className="mt-2.5 p-3 rounded-xl border border-slate-800 bg-slate-950/70 space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span className="font-semibold text-slate-300">Estoque no Tanque da Obra:</span>
+                        <span className="font-mono">Total: {currentDispenseWorkBalance.balanceLiters.toLocaleString('pt-BR')} L</span>
                       </div>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        Custo Médio Estoque: R$ {currentDispenseWorkBalance.averageCostPerLiter.toFixed(3)}/L
-                      </span>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {/* Box Diesel */}
+                        <div className={`p-2.5 rounded-lg border transition-all ${
+                          dispenseFuelType.toLowerCase().includes('diesel')
+                            ? 'bg-sky-950/70 border-sky-500 text-sky-200 ring-1 ring-sky-500'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                        }`}>
+                          <div className="flex items-center justify-between text-[10px] font-bold">
+                            <span>🛢️ Saldo Diesel</span>
+                            <span className="font-mono text-slate-400">
+                              R$ {currentDispenseWorkBalance.diesel.averageCostPerLiter.toFixed(2)}/L
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-white mt-0.5 font-mono">
+                            {currentDispenseWorkBalance.diesel.balanceLiters.toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-400">L</span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 mt-0.5">
+                            {currentDispenseWorkBalance.diesel.dispenseLiters} L já consumidos
+                          </div>
+                        </div>
+
+                        {/* Box Gasolina */}
+                        <div className={`p-2.5 rounded-lg border transition-all ${
+                          dispenseFuelType.toLowerCase().includes('gasolina')
+                            ? 'bg-amber-950/70 border-amber-500 text-amber-200 ring-1 ring-amber-500'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                        }`}>
+                          <div className="flex items-center justify-between text-[10px] font-bold">
+                            <span>⛽ Saldo Gasolina</span>
+                            <span className="font-mono text-slate-400">
+                              R$ {currentDispenseWorkBalance.gasolina.averageCostPerLiter.toFixed(2)}/L
+                            </span>
+                          </div>
+                          <div className="text-base font-black text-white mt-0.5 font-mono">
+                            {currentDispenseWorkBalance.gasolina.balanceLiters.toLocaleString('pt-BR')} <span className="text-[10px] font-normal text-slate-400">L</span>
+                          </div>
+                          <div className="text-[9px] text-slate-500 mt-0.5">
+                            {currentDispenseWorkBalance.gasolina.dispenseLiters} L já consumidos
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Warning if requested exceeds specific fuel balance */}
+                      {(() => {
+                        const isGas = dispenseFuelType.toLowerCase().includes('gasolina');
+                        const targetStock = isGas ? currentDispenseWorkBalance.gasolina : currentDispenseWorkBalance.diesel;
+                        const reqLiters = parseFloat(dispenseLiters);
+                        if (!isNaN(reqLiters) && reqLiters > targetStock.balanceLiters) {
+                          return (
+                            <div className="p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] flex items-center gap-1.5 font-medium">
+                              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-400" />
+                              <span>
+                                Quantidade informada ({reqLiters} L) supera o saldo de {dispenseFuelType} desta obra ({targetStock.balanceLiters.toLocaleString('pt-BR')} L).
+                              </span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1610,12 +1917,36 @@ export function FuelManagement({
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Combustível
+                    Combustível <span className="text-blue-400">*</span>
                   </label>
+                  <div className="grid grid-cols-2 gap-1 mb-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setDispenseFuelType('Diesel')}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        dispenseFuelType.toLowerCase().includes('diesel')
+                          ? 'bg-sky-600 text-white shadow-sm ring-1 ring-sky-400 font-black'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-700/60'
+                      }`}
+                    >
+                      🛢️ Diesel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDispenseFuelType('Gasolina')}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                        dispenseFuelType.toLowerCase().includes('gasolina')
+                          ? 'bg-amber-600 text-white shadow-sm ring-1 ring-amber-400 font-black'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-700/60'
+                      }`}
+                    >
+                      ⛽ Gasolina
+                    </button>
+                  </div>
                   <select
                     value={dispenseFuelType}
                     onChange={(e) => setDispenseFuelType(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-blue-500 cursor-pointer"
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
                     {COMMON_FUEL_TYPES.map(f => (
                       <option key={f} value={f}>{f}</option>

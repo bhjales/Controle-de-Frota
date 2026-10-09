@@ -127,6 +127,9 @@ export function exportFuelReportPDF(options: FuelReportOptions) {
   );
 
   // Calculate Primary Metrics
+  const isDiesel = (t?: string) => (t || '').toLowerCase().includes('diesel');
+  const isGasolina = (t?: string) => (t || '').toLowerCase().includes('gasolina');
+
   const totalInflowLiters = filteredInflows.reduce((s, i) => s + (Number(i.liters) || 0), 0);
   const totalInflowCost = filteredInflows.reduce((s, i) => s + (Number(i.totalCost) || 0), 0);
   const totalDispenseLiters = filteredDispenses.reduce((s, d) => s + (Number(d.liters) || 0), 0);
@@ -135,9 +138,18 @@ export function exportFuelReportPDF(options: FuelReportOptions) {
   const avgCostPerLiter = totalInflowLiters > 0 ? (totalInflowCost / totalInflowLiters) : 0;
   const estimatedStockValue = balanceLiters * avgCostPerLiter;
 
+  // Specific fuel type metrics
+  const dieselInL = filteredInflows.filter(i => isDiesel(i.fuelType)).reduce((s, i) => s + (Number(i.liters) || 0), 0);
+  const dieselDispL = filteredDispenses.filter(d => isDiesel(d.fuelType)).reduce((s, d) => s + (Number(d.liters) || 0), 0);
+  const dieselBalL = Math.max(0, dieselInL - dieselDispL);
+
+  const gasInL = filteredInflows.filter(i => isGasolina(i.fuelType)).reduce((s, i) => s + (Number(i.liters) || 0), 0);
+  const gasDispL = filteredDispenses.filter(d => isGasolina(d.fuelType)).reduce((s, d) => s + (Number(d.liters) || 0), 0);
+  const gasBalL = Math.max(0, gasInL - gasDispL);
+
   // KPI Summary Boxes (4 cards side-by-side)
   const cardWidth = 64;
-  const cardHeight = 18;
+  const cardHeight = 20;
   const cardY = 34;
   const cardSpacing = 6;
 
@@ -147,62 +159,69 @@ export function exportFuelReportPDF(options: FuelReportOptions) {
   doc.roundedRect(12, cardY, cardWidth, cardHeight, 2, 2, 'FD');
   doc.setTextColor(100, 116, 139);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.text('TOTAL ADQUIRIDO (ENTRADAS FISCAIS)', 16, cardY + 5);
+  doc.setFontSize(6.5);
+  doc.text('TOTAL ADQUIRIDO (ENTRADAS FISCAIS)', 16, cardY + 4.5);
   doc.setTextColor(15, 23, 42);
-  doc.setFontSize(10.5);
-  doc.text(`${totalInflowLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`, 16, cardY + 11);
+  doc.setFontSize(10);
+  doc.text(`${totalInflowLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`, 16, cardY + 10.5);
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(6.5);
+  doc.text(`Diesel: ${dieselInL.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L  •  Gasol: ${gasInL.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L`, 16, cardY + 15);
   doc.setTextColor(16, 185, 129);
-  doc.setFontSize(7.5);
-  doc.text(`R$ ${totalInflowCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 16, cardY + 15.5);
+  doc.text(`R$ ${totalInflowCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 16, cardY + 18.5);
 
   // Card 2: Total Abastecido (Saídas)
   const c2X = 12 + cardWidth + cardSpacing;
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(c2X, cardY, cardWidth, cardHeight, 2, 2, 'FD');
   doc.setTextColor(100, 116, 139);
-  doc.setFontSize(7);
-  doc.text('TOTAL CONSUMIDO NA FROTA', c2X + 4, cardY + 5);
+  doc.setFontSize(6.5);
+  doc.text('TOTAL CONSUMIDO NA FROTA', c2X + 4, cardY + 4.5);
   doc.setTextColor(15, 23, 42);
-  doc.setFontSize(10.5);
-  doc.text(`${totalDispenseLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`, c2X + 4, cardY + 11);
+  doc.setFontSize(10);
+  doc.text(`${totalDispenseLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`, c2X + 4, cardY + 10.5);
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(6.5);
+  doc.text(`Diesel: ${dieselDispL.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L  •  Gasol: ${gasDispL.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L`, c2X + 4, cardY + 15);
   doc.setTextColor(239, 68, 68);
-  doc.setFontSize(7.5);
-  doc.text(`R$ ${totalDispenseCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} gasto`, c2X + 4, cardY + 15.5);
+  doc.text(`R$ ${totalDispenseCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} gasto`, c2X + 4, cardY + 18.5);
 
   // Card 3: Saldo em Tanques
   const c3X = c2X + cardWidth + cardSpacing;
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(c3X, cardY, cardWidth, cardHeight, 2, 2, 'FD');
   doc.setTextColor(100, 116, 139);
-  doc.setFontSize(7);
-  doc.text('SALDO DISPONÍVEL EM TANQUE', c3X + 4, cardY + 5);
+  doc.setFontSize(6.5);
+  doc.text('SALDO DISPONÍVEL EM TANQUE', c3X + 4, cardY + 4.5);
   doc.setTextColor(15, 23, 42);
-  doc.setFontSize(10.5);
-  doc.text(`${balanceLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`, c3X + 4, cardY + 11);
+  doc.setFontSize(10);
+  doc.text(`${balanceLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`, c3X + 4, cardY + 10.5);
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(6.5);
+  doc.text(`Diesel: ${dieselBalL.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L  •  Gasol: ${gasBalL.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L`, c3X + 4, cardY + 15);
   doc.setTextColor(14, 165, 233);
-  doc.setFontSize(7.5);
-  doc.text(`Valor Est.: R$ ${estimatedStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, c3X + 4, cardY + 15.5);
+  doc.text(`Estoque: R$ ${estimatedStockValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, c3X + 4, cardY + 18.5);
 
   // Card 4: Custo Médio por Litro
   const c4X = c3X + cardWidth + cardSpacing;
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(c4X, cardY, cardWidth, cardHeight, 2, 2, 'FD');
   doc.setTextColor(100, 116, 139);
-  doc.setFontSize(7);
-  doc.text('PREÇO MÉDIO / LITRO', c4X + 4, cardY + 5);
+  doc.setFontSize(6.5);
+  doc.text('PREÇO MÉDIO / LITRO', c4X + 4, cardY + 4.5);
   doc.setTextColor(15, 23, 42);
-  doc.setFontSize(10.5);
-  doc.text(`R$ ${avgCostPerLiter.toFixed(3)}`, c4X + 4, cardY + 11);
+  doc.setFontSize(10);
+  doc.text(`R$ ${avgCostPerLiter.toFixed(3)}`, c4X + 4, cardY + 10.5);
   doc.setTextColor(100, 116, 139);
-  doc.setFontSize(7.5);
-  doc.text(`${works.length} obras cadastradas`, c4X + 4, cardY + 15.5);
+  doc.setFontSize(6.5);
+  doc.text(`${works.length} obras cadastradas`, c4X + 4, cardY + 15);
+  doc.text('Valores ponderados fiscais', c4X + 4, cardY + 18.5);
 
   // SECTION 1: Balanço de Combustível por Obra
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(30, 41, 59);
-  doc.text('1. Balanço de Estoque e Consumo Consolidado por Canteiro de Obra', 12, 57);
+  doc.text('1. Balanço de Estoque e Consumo Diferenciado por Canteiro e Tipo de Combustível', 12, 59);
 
   const worksToInclude = selectedWorkObj ? [selectedWorkObj] : works;
   const workRows = worksToInclude.map(w => {
@@ -214,47 +233,55 @@ export function exportFuelReportPDF(options: FuelReportOptions) {
     const outLiters = dispensesForWork.reduce((s, d) => s + (Number(d.liters) || 0), 0);
     const balLiters = Math.max(0, inLiters - outLiters);
     const unitPrice = inLiters > 0 ? (inCost / inLiters) : 0;
-    const workVehCount = vehicles.filter(v => v.workId === w.id).length;
-    const statusText = balLiters <= 0 && inLiters > 0 ? 'Crítico (Zerado)' : balLiters < 200 && inLiters > 0 ? 'Atenção (Baixo)' : 'Normal';
+
+    const dIn = inflowsForWork.filter(i => isDiesel(i.fuelType)).reduce((s, i) => s + (Number(i.liters) || 0), 0);
+    const dOut = dispensesForWork.filter(d => isDiesel(d.fuelType)).reduce((s, d) => s + (Number(d.liters) || 0), 0);
+    const dBal = Math.max(0, dIn - dOut);
+
+    const gIn = inflowsForWork.filter(i => isGasolina(i.fuelType)).reduce((s, i) => s + (Number(i.liters) || 0), 0);
+    const gOut = dispensesForWork.filter(d => isGasolina(d.fuelType)).reduce((s, d) => s + (Number(d.liters) || 0), 0);
+    const gBal = Math.max(0, gIn - gOut);
+
+    const statusText = balLiters <= 0 && inLiters > 0 ? 'Crítico (Zerado)' : balLiters < 200 && inLiters > 0 ? 'Atenção (Baixo)' : inLiters === 0 ? 'Sem estoque' : 'Normal';
 
     return [
       w.name,
-      `${w.city} - ${w.state}`,
-      `${workVehCount} ativos`,
-      `${inLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`,
-      `R$ ${inCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
-      `${outLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`,
+      `${w.city}/${w.state}`,
+      `${dBal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`,
+      `${dOut.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`,
+      `${gBal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`,
+      `${gOut.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`,
       `${balLiters.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`,
-      unitPrice > 0 ? `R$ ${unitPrice.toFixed(3)}` : 'R$ 0,000',
+      unitPrice > 0 ? `R$ ${unitPrice.toFixed(2)}` : 'R$ 0,00',
       statusText
     ];
   });
 
   autoTable(doc, {
-    startY: 61,
-    head: [['CANTEIRO / OBRA', 'CIDADE/UF', 'FROTA VINC.', 'ENTRADAS (L)', 'TOTAL COMPRAS (R$)', 'CONSUMO (L)', 'SALDO DISP. (L)', 'MÉDIA R$/L', 'STATUS ESTOQUE']],
+    startY: 63,
+    head: [['CANTEIRO / OBRA', 'CIDADE/UF', 'SALDO DIESEL', 'CONSUMO DIESEL', 'SALDO GASOLINA', 'CONSUMO GASOLINA', 'SALDO TOTAL', 'MÉDIA R$/L', 'STATUS ESTOQUE']],
     body: workRows,
     headStyles: {
       fillColor: [30, 41, 59],
       textColor: [255, 255, 255],
-      fontSize: 7.5,
+      fontSize: 7,
       fontStyle: 'bold'
     },
     styles: {
-      fontSize: 7,
+      fontSize: 6.5,
       cellPadding: 2,
       font: 'helvetica'
     },
     columnStyles: {
-      0: { cellWidth: 44 },
+      0: { cellWidth: 40 },
       1: { cellWidth: 26 },
-      2: { cellWidth: 20 },
+      2: { cellWidth: 22, halign: 'right' },
       3: { cellWidth: 24, halign: 'right' },
-      4: { cellWidth: 32, halign: 'right' },
-      5: { cellWidth: 24, halign: 'right' },
-      6: { cellWidth: 26, halign: 'right' },
-      7: { cellWidth: 24, halign: 'right' },
-      8: { cellWidth: 28, halign: 'center' }
+      4: { cellWidth: 24, halign: 'right' },
+      5: { cellWidth: 26, halign: 'right' },
+      6: { cellWidth: 24, halign: 'right' },
+      7: { cellWidth: 20, halign: 'right' },
+      8: { cellWidth: 26, halign: 'center' }
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252]
@@ -459,16 +486,22 @@ export function exportFuelConsolidatedCSV(options: FuelReportOptions) {
   lines.push('');
 
   // 1. BALANÇO POR OBRA
-  lines.push('--- 1. BALANCO POR CANTEIRO DE OBRA ---');
+  lines.push('--- 1. BALANCO POR CANTEIRO DE OBRA (DIFERENCIADO POR TIPO) ---');
   lines.push([
     'Obra/Canteiro',
     'Cidade',
     'Estado',
-    'Litros Recebidos (L)',
+    'Saldo Diesel (L)',
+    'Consumo Diesel (L)',
+    'Entradas Diesel (L)',
+    'Saldo Gasolina (L)',
+    'Consumo Gasolina (L)',
+    'Entradas Gasolina (L)',
+    'Saldo Total (L)',
+    'Consumo Total (L)',
+    'Entradas Total (L)',
     'Valor Total Compras (R$)',
-    'Litros Abastecidos (L)',
-    'Saldo Disponivel (L)',
-    'Custo Medio (R$/L)'
+    'Custo Medio Geral (R$/L)'
   ].map(escapeCSV).join(';'));
 
   works.forEach(w => {
@@ -480,14 +513,31 @@ export function exportFuelConsolidatedCSV(options: FuelReportOptions) {
     const balLiters = Math.max(0, inLiters - outLiters);
     const unitPrice = inLiters > 0 ? (inCost / inLiters) : 0;
 
+    const isDiesel = (t?: string) => (t || '').toLowerCase().includes('diesel');
+    const isGasolina = (t?: string) => (t || '').toLowerCase().includes('gasolina');
+
+    const dIn = inflowsForWork.filter(i => isDiesel(i.fuelType)).reduce((s, i) => s + (Number(i.liters) || 0), 0);
+    const dOut = dispensesForWork.filter(d => isDiesel(d.fuelType)).reduce((s, d) => s + (Number(d.liters) || 0), 0);
+    const dBal = Math.max(0, dIn - dOut);
+
+    const gIn = inflowsForWork.filter(i => isGasolina(i.fuelType)).reduce((s, i) => s + (Number(i.liters) || 0), 0);
+    const gOut = dispensesForWork.filter(d => isGasolina(d.fuelType)).reduce((s, d) => s + (Number(d.liters) || 0), 0);
+    const gBal = Math.max(0, gIn - gOut);
+
     lines.push([
       w.name,
       w.city,
       w.state,
+      dBal.toFixed(2),
+      dOut.toFixed(2),
+      dIn.toFixed(2),
+      gBal.toFixed(2),
+      gOut.toFixed(2),
+      gIn.toFixed(2),
+      balLiters.toFixed(2),
+      outLiters.toFixed(2),
       inLiters.toFixed(2),
       inCost.toFixed(2),
-      outLiters.toFixed(2),
-      balLiters.toFixed(2),
       unitPrice.toFixed(3)
     ].map(escapeCSV).join(';'));
   });
