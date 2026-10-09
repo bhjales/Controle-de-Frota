@@ -479,6 +479,9 @@ export default function App() {
                 equipmentUsages={equipmentUsages}
                 users={users}
                 works={works}
+                fuelInflows={fuelInflows}
+                fuelDispenses={fuelDispenses}
+                store={store}
               />
             )}
 

@@ -20,10 +20,33 @@ import {
   Car,
   Download,
   FileText,
-  Filter
+  Filter,
+  Fuel,
+  Droplet
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { User, Vehicle, Equipment, Trip, EquipmentUsage, ConstructionWork } from '../types';
+import { 
+  LineChart, 
+  Line, 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Legend, 
+  Cell 
+} from 'recharts';
+import { 
+  User, 
+  Vehicle, 
+  Equipment, 
+  Trip, 
+  EquipmentUsage, 
+  ConstructionWork, 
+  FuelInflow, 
+  FuelDispense 
+} from '../types';
 import { FleetStore } from '../store/fleetStore';
 
 interface ManagerDashboardProps {
@@ -34,6 +57,9 @@ interface ManagerDashboardProps {
   equipmentUsages: EquipmentUsage[];
   users: User[];
   works?: ConstructionWork[];
+  fuelInflows?: FuelInflow[];
+  fuelDispenses?: FuelDispense[];
+  store?: FleetStore;
 }
 
 export function ManagerDashboard({
@@ -43,11 +69,16 @@ export function ManagerDashboard({
   trips: rawTrips,
   equipmentUsages: rawEquipmentUsages,
   users,
-  works: inputWorks
+  works: inputWorks,
+  fuelInflows: inputFuelInflows,
+  fuelDispenses: inputFuelDispenses,
+  store: inputStore
 }: ManagerDashboardProps) {
 
-  const store = FleetStore.getInstance();
+  const store = inputStore || FleetStore.getInstance();
   const works = inputWorks || store.works;
+  const rawFuelInflows = inputFuelInflows || store.fuelInflows || [];
+  const rawFuelDispenses = inputFuelDispenses || store.fuelDispenses || [];
 
   // --- FILTER STATES ---
   const [filterAssetType, setFilterAssetType] = React.useState('all'); // 'all', 'vehicles', 'equipments'
@@ -324,6 +355,177 @@ export function ManagerDashboard({
 
   // Calculate maximum cost amongst Obras for ratio bar display
   const maxMaintCostAcrossObras = Math.max(...groupingData.map(g => g.maintenanceCost), 1);
+
+  // --- 6.5 FUEL ANALYTICS COMPUTATIONS ---
+  // A. Filtered fuel dispenses and inflows
+  const fuelDispenses = rawFuelDispenses.filter(d => {
+    if (!isWithinDateRange(d.date)) return false;
+    if (filterWorkId && d.workId !== filterWorkId) return false;
+    return true;
+  });
+
+  const fuelInflows = rawFuelInflows.filter(i => {
+    if (!isWithinDateRange(i.date)) return false;
+    if (filterWorkId && i.workId !== filterWorkId) return false;
+    return true;
+  });
+
+  // B. Monthly fuel consumption compared between works (last 6 calendar months)
+  const monthlyFuelByWorkData: Array<{
+    monthKey: string;
+    monthLabel: string;
+    totalLiters: number;
+    [workName: string]: string | number;
+  }> = [];
+
+  const monthKeys: { key: string; label: string; year: number; month: number }[] = [];
+  const currentDate = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('pt-BR', { month: 'short' });
+    monthKeys.push({ key, label, year: d.getFullYear(), month: d.getMonth() });
+  }
+
+  // Active works to display in the monthly fuel comparison
+  const trackedWorks = worksList.length > 0 ? worksList : [{ id: 'geral', name: 'Geral', city: 'Matriz', state: 'SP', status: 'active' as const, createdAt: '' }];
+
+  monthKeys.forEach(({ key, label }) => {
+    const row: { monthKey: string; monthLabel: string; totalLiters: number; [workName: string]: string | number } = {
+      monthKey: key,
+      monthLabel: label,
+      totalLiters: 0
+    };
+
+    // Initialize each work with 0
+    trackedWorks.forEach(w => {
+      row[w.name] = 0;
+    });
+    row['Outras / Direto'] = 0;
+
+    // Accumulate liters from dispenses in this month
+    fuelDispenses.forEach(dispense => {
+      const dDate = new Date(dispense.date);
+      if (isNaN(dDate.getTime())) return;
+      const dKey = `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}`;
+      if (dKey === key) {
+        const liters = Number(dispense.liters) || 0;
+        row.totalLiters = Math.round(((row.totalLiters as number) + liters) * 10) / 10;
+        
+        let found = false;
+        if (dispense.workId) {
+          const matchWork = trackedWorks.find(w => w.id === dispense.workId);
+          if (matchWork) {
+            row[matchWork.name] = Math.round(((row[matchWork.name] as number) + liters) * 10) / 10;
+            found = true;
+          }
+        }
+        if (!found) {
+          row['Outras / Direto'] = Math.round(((row['Outras / Direto'] as number) + liters) * 10) / 10;
+        }
+      }
+    });
+
+    monthlyFuelByWorkData.push(row);
+  });
+
+  // Palette of distinctive colors for works in the stacked bar chart
+  const workColorPalette = ['#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
+
+  // C. Cost per liter of fuels (Diesel, Gasolina, etc.)
+  // We compute real weighted average cost per liter from inflows, or dispenses with unitCost, or fallbacks
+  const fuelTypesFound = Array.from(new Set([
+    ...fuelInflows.map(i => i.fuelType || 'Diesel'),
+    ...fuelDispenses.map(d => d.fuelType || 'Diesel'),
+    'Diesel',
+    'Gasolina'
+  ])).filter(Boolean);
+
+  const fuelCostPerLiterData = fuelTypesFound.map((fType, idx) => {
+    const inflowsForType = fuelInflows.filter(i => (i.fuelType || '').toLowerCase() === fType.toLowerCase());
+    const dispensesForType = fuelDispenses.filter(d => (d.fuelType || '').toLowerCase() === fType.toLowerCase() && (d.unitCost || 0) > 0);
+
+    const totalInflowLiters = inflowsForType.reduce((s, i) => s + (Number(i.liters) || 0), 0);
+    const totalInflowCost = inflowsForType.reduce((s, i) => s + (Number(i.totalCost) || 0), 0);
+
+    let unitCost = 0;
+    if (totalInflowLiters > 0) {
+      unitCost = totalInflowCost / totalInflowLiters;
+    } else if (dispensesForType.length > 0) {
+      const totalDispLiters = dispensesForType.reduce((s, d) => s + (Number(d.liters) || 0), 0);
+      const totalDispCost = dispensesForType.reduce((s, d) => s + ((Number(d.unitCost) || 0) * (Number(d.liters) || 0)), 0);
+      unitCost = totalDispLiters > 0 ? (totalDispCost / totalDispLiters) : 0;
+    } else {
+      // Default reference market value if no records yet
+      unitCost = fType.toLowerCase().includes('gasolina') ? 5.89 : 6.15;
+    }
+
+    const totalSpentType = totalInflowCost > 0 
+      ? totalInflowCost 
+      : fuelDispenses
+          .filter(d => (d.fuelType || '').toLowerCase() === fType.toLowerCase())
+          .reduce((s, d) => s + (Number(d.totalCost || d.calculatedCost) || 0), 0);
+
+    const totalLitersType = totalInflowLiters > 0
+      ? totalInflowLiters
+      : fuelDispenses
+          .filter(d => (d.fuelType || '').toLowerCase() === fType.toLowerCase())
+          .reduce((s, d) => s + (Number(d.liters) || 0), 0);
+
+    return {
+      fuelType: fType,
+      unitCost: Math.round(unitCost * 100) / 100,
+      totalSpent: Math.round(totalSpentType * 100) / 100,
+      totalLiters: Math.round(totalLitersType * 10) / 10,
+      color: fType.toLowerCase().includes('gasolina') ? '#f59e0b' : '#0284c7'
+    };
+  });
+
+  // D. Average and total spending per construction work (Fuel & Maintenance)
+  // Determine distinct active months in dataset to calculate fair monthly average
+  const countMonths = Math.max(1, monthKeys.length);
+
+  const workSpendingData = trackedWorks.map(work => {
+    // 1. Fuel spent by this work
+    const dispensesForWork = fuelDispenses.filter(d => d.workId === work.id);
+    const totalFuelLiters = dispensesForWork.reduce((s, d) => s + (Number(d.liters) || 0), 0);
+    const totalFuelCost = dispensesForWork.reduce((s, d) => {
+      const cost = Number(d.totalCost ?? d.calculatedCost) || 0;
+      if (cost > 0) return s + cost;
+      // Fallback: liters * work fuel balance average
+      const bal = store.getWorkFuelBalance(work.id);
+      return s + (Number(d.liters || 0) * (bal.averageCostPerLiter || 6.15));
+    }, 0);
+
+    // 2. Maintenance spent by this work
+    const workGroup = groupingData.find(g => g.id === work.id);
+    const totalMaintCostWork = workGroup ? workGroup.maintenanceCost : 0;
+
+    const totalCombinedCost = totalFuelCost + totalMaintCostWork;
+    const monthlyAverageSpent = totalCombinedCost / countMonths;
+    const monthlyFuelAverage = totalFuelCost / countMonths;
+
+    return {
+      workId: work.id,
+      workName: work.name,
+      cityState: `${work.city} - ${work.state}`,
+      totalFuelCost: Math.round(totalFuelCost * 100) / 100,
+      totalFuelLiters: Math.round(totalFuelLiters * 10) / 10,
+      totalMaintCost: Math.round(totalMaintCostWork * 100) / 100,
+      totalCombinedCost: Math.round(totalCombinedCost * 100) / 100,
+      monthlyAverageSpent: Math.round(monthlyAverageSpent * 100) / 100,
+      monthlyFuelAverage: Math.round(monthlyFuelAverage * 100) / 100,
+      vehiclesCount: vehicles.filter(v => v.workId === work.id).length
+    };
+  }).sort((a, b) => b.totalCombinedCost - a.totalCombinedCost);
+
+  // Totals for summary KPI cards
+  const totalFleetFuelLiters = fuelDispenses.reduce((s, d) => s + (Number(d.liters) || 0), 0);
+  const totalFleetFuelCost = workSpendingData.reduce((s, w) => s + w.totalFuelCost, 0);
+  const overallAvgSpendPerWork = workSpendingData.length > 0 
+    ? Math.round((workSpendingData.reduce((s, w) => s + w.monthlyAverageSpent, 0) / workSpendingData.length) * 100) / 100 
+    : 0;
+
 
   // --- 7. EXPORT REPORTS FUNCTIONS (PDF IMPLEMENTATION) ---
   const exportMaintenance = () => {
@@ -1835,6 +2037,376 @@ export function ManagerDashboard({
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ⛽ NOVO: GRÁFICOS DE COMBUSTÍVEL E CUSTOS OPERACIONAIS POR OBRA */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm text-left space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-amber-500/10 text-amber-600 rounded-xl">
+                <Fuel className="w-5.5 h-5.5" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight font-display">
+                Indicadores e Análise de Combustível por Obra
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 font-medium">
+              Consumo mensal comparativo entre canteiros, custo por litro praticado e média de gasto financeiro por obra.
+            </p>
+          </div>
+
+          {/* Quick fuel KPI pills */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-slate-50 border border-slate-200/80 px-3.5 py-2 rounded-2xl">
+              <span className="block text-[9px] uppercase font-bold text-slate-400 font-mono">Consumo Total Registrado</span>
+              <span className="text-xs sm:text-sm font-black text-slate-800 font-display">
+                {totalFleetFuelLiters.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} L
+              </span>
+            </div>
+            <div className="bg-blue-50 border border-blue-200/80 px-3.5 py-2 rounded-2xl">
+              <span className="block text-[9px] uppercase font-bold text-blue-700 font-mono">Gasto com Combustível</span>
+              <span className="text-xs sm:text-sm font-black text-blue-900 font-display">
+                R$ {totalFleetFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200/80 px-3.5 py-2 rounded-2xl">
+              <span className="block text-[9px] uppercase font-bold text-emerald-700 font-mono">Média Mensal por Obra</span>
+              <span className="text-xs sm:text-sm font-black text-emerald-900 font-display">
+                R$ {overallAvgSpendPerWork.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* The Two Main Requested Visual Charts Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* GRÁFICO 1: Consumo mensal de combustível comparado entre as diferentes Obras cadastradas */}
+          <div className="bg-slate-50/70 border border-slate-200 rounded-2.5xl p-5 space-y-4 flex flex-col justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider font-mono">
+                  Comparativo Cronológico Mensal
+                </span>
+                <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full font-mono">
+                  Volume em Litros (L)
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 font-display flex items-center gap-1.5">
+                <Droplet className="w-4 h-4 text-sky-600" />
+                Consumo Mensal de Combustível por Obra
+              </h4>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Litros abastecidos nos últimos 6 meses, agrupados e comparados entre cada canteiro ativo.
+              </p>
+            </div>
+
+            {/* Bar Chart Container */}
+            <div className="h-64 w-full bg-white border border-slate-200/80 rounded-2xl p-3 shadow-xs">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyFuelByWorkData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="monthLabel" 
+                    fontSize={11} 
+                    tickLine={false} 
+                    axisLine={{ stroke: '#cbd5e1' }}
+                  />
+                  <YAxis 
+                    fontSize={10} 
+                    tickLine={false} 
+                    axisLine={{ stroke: '#cbd5e1' }}
+                    tickFormatter={(val) => `${val} L`}
+                  />
+                  <Tooltip 
+                    cursor={{ fill: 'rgba(2, 132, 199, 0.05)' }}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload || !payload.length) return null;
+                      const totalLitersMonth = payload.reduce((acc, p) => acc + (Number(p.value) || 0), 0);
+                      return (
+                        <div className="bg-slate-900 text-white rounded-xl p-3 shadow-xl text-xs space-y-1.5 border border-slate-800 min-w-[180px]">
+                          <div className="flex justify-between items-center border-b border-slate-800 pb-1">
+                            <span className="font-bold text-slate-300 font-mono capitalize">{label}</span>
+                            <span className="font-extrabold text-sky-400 font-mono">{totalLitersMonth.toLocaleString('pt-BR')} L total</span>
+                          </div>
+                          <div className="space-y-1 pt-1 max-h-40 overflow-y-auto">
+                            {payload.map((entry, index) => {
+                              const val = Number(entry.value) || 0;
+                              if (val <= 0 && payload.length > 3) return null;
+                              return (
+                                <div key={`tooltip-${index}`} className="flex justify-between items-center text-[11px] gap-3">
+                                  <span className="flex items-center gap-1.5 text-slate-300 truncate max-w-[120px]">
+                                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                                    {entry.name}:
+                                  </span>
+                                  <span className="font-mono font-bold text-white shrink-0">
+                                    {val.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} L
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }}
+                    iconType="circle"
+                  />
+                  {trackedWorks.map((work, idx) => (
+                    <Bar 
+                      key={work.id} 
+                      dataKey={work.name} 
+                      name={work.name} 
+                      fill={workColorPalette[idx % workColorPalette.length]} 
+                      stackId="worksStack"
+                      radius={idx === trackedWorks.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                    />
+                  ))}
+                  {monthlyFuelByWorkData.some(d => (d['Outras / Direto'] as number) > 0) && (
+                    <Bar 
+                      dataKey="Outras / Direto" 
+                      name="Outras / Direto" 
+                      fill="#94a3b8" 
+                      stackId="worksStack" 
+                      radius={[4, 4, 0, 0]}
+                    />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Micro legend summary table */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+              {trackedWorks.slice(0, 3).map((w, idx) => {
+                const totalWorkLiters = fuelDispenses
+                  .filter(d => d.workId === w.id)
+                  .reduce((s, d) => s + (Number(d.liters) || 0), 0);
+                return (
+                  <div key={w.id} className="bg-white border border-slate-200/70 p-2 rounded-xl flex items-center gap-2">
+                    <span 
+                      className="w-2.5 h-2.5 rounded-full shrink-0" 
+                      style={{ backgroundColor: workColorPalette[idx % workColorPalette.length] }} 
+                    />
+                    <div className="overflow-hidden">
+                      <p className="font-bold text-slate-800 truncate leading-tight">{w.name}</p>
+                      <p className="text-[10px] text-slate-400 font-mono">{totalWorkLiters.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* GRÁFICO 2: Custo por litro dos combustíveis e Média de gasto por obra */}
+          <div className="bg-slate-50/70 border border-slate-200 rounded-2.5xl p-5 space-y-4 flex flex-col justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider font-mono">
+                  Custos Unitários & Médias
+                </span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full font-mono">
+                  R$ por Litro & R$ / Mês
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-slate-900 font-display flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-emerald-600" />
+                Custo por Litro e Média de Gasto por Obra
+              </h4>
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Preço médio praticado por combustível e comparativo de média mensal gasta por cada obra.
+              </p>
+            </div>
+
+            {/* Split layout: Cost per liter pills + Spending per work bar chart */}
+            <div className="space-y-3">
+              {/* Cost per Liter KPI Boxes */}
+              <div className="grid grid-cols-2 gap-3">
+                {fuelCostPerLiterData.map(fuel => (
+                  <div 
+                    key={fuel.fuelType}
+                    className="bg-white border border-slate-200/90 rounded-2xl p-3.5 shadow-xs flex flex-col justify-between"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[9px] uppercase font-black tracking-wider text-slate-400 font-mono">
+                          Preço Médio / L
+                        </span>
+                        <h5 className="text-xs font-black text-slate-800 flex items-center gap-1 mt-0.5">
+                          <span 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: fuel.color }} 
+                          />
+                          {fuel.fuelType}
+                        </h5>
+                      </div>
+                      <span className="text-[9px] font-mono bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded">
+                        {fuel.totalLiters.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L
+                      </span>
+                    </div>
+
+                    <div className="mt-2 text-left">
+                      <p className="text-xl sm:text-2xl font-black text-slate-900 font-display tracking-tight leading-none">
+                        R$ {fuel.unitCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <span className="text-[10px] text-slate-400 font-sans font-normal ml-1">/ litro</span>
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-1 font-semibold truncate">
+                        Gasto Total: R$ {fuel.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Bar Chart: Média de Gasto Mensal por Obra */}
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-3 shadow-xs">
+                <div className="flex justify-between items-center mb-2 px-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 font-mono">
+                    Média de Gasto Operacional por Obra (R$/mês)
+                  </span>
+                  <span className="text-[10px] text-emerald-600 font-extrabold font-mono">
+                    Combustível + Manutenção
+                  </span>
+                </div>
+                
+                <div className="h-44 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart 
+                      data={workSpendingData} 
+                      layout="vertical"
+                      margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                      <XAxis 
+                        type="number" 
+                        fontSize={9} 
+                        tickLine={false}
+                        axisLine={{ stroke: '#cbd5e1' }}
+                        tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                      />
+                      <YAxis 
+                        dataKey="workName" 
+                        type="category" 
+                        fontSize={10} 
+                        tickLine={false}
+                        axisLine={{ stroke: '#cbd5e1' }}
+                        width={95}
+                        tickFormatter={(name) => name.length > 12 ? `${name.substring(0, 11)}...` : name}
+                      />
+                      <Tooltip 
+                        content={({ active, payload }) => {
+                          if (!active || !payload || !payload.length) return null;
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-slate-900 text-white rounded-xl p-3 shadow-xl text-xs space-y-1 border border-slate-800">
+                              <p className="font-bold text-slate-200 border-b border-slate-800 pb-1">{data.workName}</p>
+                              <p className="text-[11px] text-slate-400">{data.cityState}</p>
+                              <div className="pt-1 space-y-0.5 font-mono text-[11px]">
+                                <p className="text-emerald-400 font-bold">
+                                  Média Mensal Total: R$ {data.monthlyAverageSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-sky-300">
+                                  Combustível: R$ {data.totalFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-rose-300">
+                                  Manutenção: R$ {data.totalMaintCost.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar 
+                        dataKey="monthlyAverageSpent" 
+                        name="Média Mensal" 
+                        radius={[0, 6, 6, 0]}
+                      >
+                        {workSpendingData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={workColorPalette[index % workColorPalette.length]} 
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Explanatory footer note */}
+            <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500 font-medium">
+              <span>💡 Média calculada com base no rateio de abastecimentos e serviços da obra.</span>
+              <span className="font-mono font-bold text-slate-700">
+                {workSpendingData.length} canteiros
+              </span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Detailed Breakdown Card: Rateio Consolidado de Gastos por Obra */}
+        <div className="border border-slate-200/80 rounded-2xl bg-slate-50/50 p-4 overflow-x-auto">
+          <div className="flex justify-between items-center mb-3">
+            <h5 className="text-xs font-black text-slate-800 uppercase tracking-wider font-mono">
+              Quadro Consolidado de Gastos Operacionais por Obra
+            </h5>
+            <span className="text-[10px] text-slate-500 font-semibold font-sans">
+              Valores acumulados no período selecionado
+            </span>
+          </div>
+
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-400 font-mono">
+                <th className="pb-2">Obra / Canteiro</th>
+                <th className="pb-2 text-right">Veículos</th>
+                <th className="pb-2 text-right">Consumo (L)</th>
+                <th className="pb-2 text-right">Gasto Combustível</th>
+                <th className="pb-2 text-right">Gasto Manutenção</th>
+                <th className="pb-2 text-right">Custo Total</th>
+                <th className="pb-2 text-right">Média / Mês</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200/60 font-sans">
+              {workSpendingData.map(w => (
+                <tr key={w.workId} className="hover:bg-white/80 transition-colors">
+                  <td className="py-2.5 font-bold text-slate-800">
+                    {w.workName}
+                    <span className="block text-[10px] text-slate-400 font-normal">{w.cityState}</span>
+                  </td>
+                  <td className="py-2.5 text-right font-mono text-slate-600 font-semibold">
+                    {w.vehiclesCount}
+                  </td>
+                  <td className="py-2.5 text-right font-mono text-sky-700 font-bold">
+                    {w.totalFuelLiters.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} L
+                  </td>
+                  <td className="py-2.5 text-right font-mono text-slate-700 font-bold">
+                    R$ {w.totalFuelCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2.5 text-right font-mono text-rose-700 font-bold">
+                    R$ {w.totalMaintCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2.5 text-right font-mono text-slate-900 font-black">
+                    R$ {w.totalCombinedCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                  <td className="py-2.5 text-right font-mono text-emerald-700 font-extrabold">
+                    R$ {w.monthlyAverageSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              ))}
+              {workSpendingData.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-4 text-center text-slate-400 italic">
+                    Nenhum dado de abastecimento ou manutenção registrado para as obras selecionadas.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
