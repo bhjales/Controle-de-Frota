@@ -1901,8 +1901,8 @@ export function FuelManagement({
                 >
                   <option value="">Selecione o Veículo...</option>
                   {eligibleVehicles.map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.plate} - {v.brand} {v.model} ({v.category || 'Veículo'}) {v.workName ? `[${v.workName}]` : '[Sem obra fixa]'}
+                    <option key={v.id} value={v.id} disabled={v.status === 'inactive'}>
+                      {v.plate} - {v.brand} {v.model} ({v.category || 'Veículo'}) {v.workName ? `[${v.workName}]` : '[Sem obra fixa]'} {v.status === 'inactive' ? '⛔ [Inativo]' : ''}
                     </option>
                   ))}
                 </select>

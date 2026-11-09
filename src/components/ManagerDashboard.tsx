@@ -784,7 +784,7 @@ export function ManagerDashboard({
       const nextMaint = (v.lastMaintenanceKm && v.maintenanceIntervalKm) ? (v.lastMaintenanceKm + v.maintenanceIntervalKm) : null;
       const nextMaintLabel = nextMaint ? `${nextMaint} KM` : 'Não config.';
       const nextOilLabel = v.nextOilChangeKm ? `${v.nextOilChangeKm} KM` : 'Não config.';
-      const statusLabel = v.status === 'available' ? 'Disponível' : v.status === 'in_use' ? 'Em Uso' : 'Oficina';
+      const statusLabel = v.status === 'available' ? 'Disponível' : v.status === 'in_use' ? 'Em Uso' : v.status === 'inactive' ? 'Inativo' : 'Oficina';
       const wName = v.workName || 'Garagem Central';
 
       vehRows.push([
@@ -2761,6 +2761,10 @@ export function ManagerDashboard({
                                 ) : v.status === 'in_use' ? (
                                   <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-full text-[9px] font-bold leading-none">
                                     Em Viagem
+                                  </span>
+                                ) : v.status === 'inactive' ? (
+                                  <span className="bg-slate-100 text-slate-650 border border-slate-300 px-2 py-0.5 rounded-full text-[9px] font-bold leading-none">
+                                    Inativo
                                   </span>
                                 ) : (
                                   <span className="bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-full text-[9px] font-extrabold leading-none animate-pulse">

@@ -46,7 +46,8 @@ export interface Vehicle {
   lastMaintenanceKm?: number; // KM of last maintenance
   maintenanceIntervalKm?: number; // Interval for maintenance
   nextOilChangeKm?: number; // Next Oil Change KM
-  status: 'available' | 'in_use' | 'maintenance';
+  status: 'available' | 'in_use' | 'maintenance' | 'inactive';
+  isActive?: boolean;
   createdAt: string;
   workId?: string; // Associated construction work (Obra) preallocated by Admin
   workName?: string;

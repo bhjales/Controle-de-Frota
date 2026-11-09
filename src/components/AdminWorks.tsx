@@ -164,7 +164,8 @@ export function AdminWorks({
         const statusMap: Record<string, string> = {
           available: 'Disponível',
           maintenance: 'Em Manutenção',
-          in_use: 'Em Uso'
+          in_use: 'Em Uso',
+          inactive: 'Inativo'
         };
         list.push(`${v.brand} ${v.model} (${v.plate}) - ${statusMap[v.status] || v.status}`);
       }

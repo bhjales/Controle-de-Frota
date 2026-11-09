@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle, Pencil } from 'lucide-react';
+import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle, Pencil, Ban } from 'lucide-react';
 import { Vehicle, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
 
@@ -24,6 +24,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [initialKm, setInitialKm] = useState(0);
   const [category, setCategory] = useState<string>(store.vehicleCategories[0]?.name || '');
   const [selectedWorkId, setSelectedWorkId] = useState('');
+  const [status, setStatus] = useState<'available' | 'maintenance' | 'inactive'>('available');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
@@ -37,6 +38,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setInitialKm(vehicle.currentKm);
     setCategory(vehicle.category || store.vehicleCategories[0]?.name || '');
     setSelectedWorkId(vehicle.workId || '');
+    setStatus(vehicle.status === 'inactive' ? 'inactive' : vehicle.status === 'maintenance' ? 'maintenance' : 'available');
     setFormError('');
     setFormSuccess('');
     setShowForm(true);
@@ -53,6 +55,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setInitialKm(0);
     setCategory(store.vehicleCategories[0]?.name || '');
     setSelectedWorkId('');
+    setStatus('available');
     setFormError('');
     setFormSuccess('');
   };
@@ -87,6 +90,12 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     const matchedWork = selectedWorkId ? works.find(w => w.id === selectedWorkId) : undefined;
 
     if (editingVehicle) {
+      if (status === 'inactive' && editingVehicle.status === 'in_use') {
+        setFormError('Não é possível inativar um veículo enquanto ele estiver em viagem ativa. Finalize a viagem antes de inativá-lo.');
+        return;
+      }
+
+      const finalStatus = editingVehicle.status === 'in_use' ? 'in_use' : status;
       const updatedVehicle: Vehicle = {
         ...editingVehicle,
         brand: brand.trim(),
@@ -97,11 +106,13 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         currentKm: Number(initialKm),
         workId: matchedWork?.id,
         workName: matchedWork?.name,
-        category: category
+        category: category,
+        status: finalStatus,
+        isActive: finalStatus !== 'inactive'
       };
       
       store.updateVehicle(updatedVehicle);
-      setFormSuccess('Veículo atualizado com sucesso!');
+      setFormSuccess(finalStatus === 'inactive' ? 'Veículo inativado e atualizado com sucesso!' : 'Veículo atualizado com sucesso!');
       setTimeout(() => {
         handleCancelForm();
       }, 1500);
@@ -392,6 +403,76 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               </select>
               <p className="text-[10px] text-slate-400 mt-1 font-medium">Você pode alocar o veículo a uma obra específica para controle de checkout e roteiro, ou escolher Geral.</p>
             </div>
+
+            {/* Inactivation control when editing */}
+            {editingVehicle && (
+              <div className="md:col-span-3 bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-[11px] uppercase font-bold tracking-wider text-slate-700">
+                      Situação / Ativação do Veículo na Frota
+                    </label>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Defina se este veículo está ativo e liberado para operações ou inativo/desmobilizado da frota.
+                    </p>
+                  </div>
+                  <span className={`text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full border ${
+                    status === 'inactive'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
+                    {status === 'inactive' ? 'INATIVO' : 'ATIVO'}
+                  </span>
+                </div>
+
+                {editingVehicle.status === 'in_use' ? (
+                  <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-semibold text-indigo-800 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span>
+                    Este veículo está atualmente em viagem ativa. Para inativá-lo, aguarde ou solicite a conclusão da viagem.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setStatus('available')}
+                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                        status !== 'inactive'
+                          ? 'bg-white border-emerald-500 text-emerald-900 shadow-sm ring-1 ring-emerald-500'
+                          : 'bg-slate-100/70 border-slate-200 text-slate-500 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className={`w-4 h-4 ${status !== 'inactive' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                        <div className="text-left">
+                          <span className="block font-bold">Veículo Ativo</span>
+                          <span className="text-[10px] font-normal text-slate-500">Liberado para viagens e abastecimento</span>
+                        </div>
+                      </div>
+                      {status !== 'inactive' && <span className="text-emerald-600 font-bold text-xs">✓ Ativo</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStatus('inactive')}
+                      className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                        status === 'inactive'
+                          ? 'bg-rose-50 border-rose-500 text-rose-900 shadow-sm ring-1 ring-rose-500'
+                          : 'bg-slate-100/70 border-slate-200 text-slate-500 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Ban className={`w-4 h-4 ${status === 'inactive' ? 'text-rose-600' : 'text-slate-400'}`} />
+                        <div className="text-left">
+                          <span className="block font-bold">Inativar Veículo</span>
+                          <span className="text-[10px] font-normal text-slate-500">Bloqueado para novas saídas da frota</span>
+                        </div>
+                      </div>
+                      {status === 'inactive' && <span className="text-rose-600 font-bold text-xs">✓ Inativo</span>}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Feedback Blocks */}
@@ -445,7 +526,8 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               { id: 'all', label: 'Todos' },
               { id: 'available', label: 'Disponível' },
               { id: 'in_use', label: 'Em Uso' },
-              { id: 'maintenance', label: 'Manutenção' }
+              { id: 'maintenance', label: 'Manutenção' },
+              { id: 'inactive', label: 'Inativos' }
             ].map((st) => (
               <button
                 key={st.id}
@@ -486,12 +568,19 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
             } else if (vehicle.status === 'maintenance') {
               statusBg = 'bg-amber-50 text-amber-700 border-amber-200';
               statusText = 'Manutenção';
+            } else if (vehicle.status === 'inactive') {
+              statusBg = 'bg-rose-50 text-rose-700 border-rose-200';
+              statusText = 'Inativo';
             }
 
             return (
               <div
                 key={vehicle.id}
-                className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-slate-300 transition-all shadow-xs flex flex-col justify-between gap-4 group"
+                className={`border rounded-2xl p-5 transition-all shadow-xs flex flex-col justify-between gap-4 group ${
+                  vehicle.status === 'inactive'
+                    ? 'bg-slate-50/70 border-rose-200/80 hover:border-rose-300'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
               >
                 <div>
                   {/* Top line ID & Action */}
@@ -501,7 +590,11 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                     </span>
                     
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold border rounded-full ${statusBg}`}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-current block"></span>
+                      {vehicle.status === 'inactive' ? (
+                        <Ban className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-current block"></span>
+                      )}
                       {statusText}
                     </span>
                   </div>
@@ -632,7 +725,16 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                 {/* Operations Line */}
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between pt-4 border-t border-slate-100 mt-auto gap-3">
                   <div className="flex gap-1.5 flex-1 min-w-0">
-                    {vehicle.status !== 'in_use' ? (
+                    {vehicle.status === 'inactive' ? (
+                      <button
+                        onClick={() => store.toggleVehicleStatus(vehicle.id, 'available')}
+                        className="text-xs font-semibold px-3 py-2 rounded-lg border transition-all flex items-center justify-center gap-1.5 cursor-pointer flex-1 sm:flex-initial text-center bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-250 shadow-2xs"
+                        title="Reativar veículo na frota"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Reativar Veículo
+                      </button>
+                    ) : vehicle.status !== 'in_use' ? (
                       <button
                         onClick={() => handleOpenMaintenanceModal(vehicle.id, vehicle.status)}
                         className={`text-xs font-semibold px-3 py-2 rounded-lg border transition-all flex items-center justify-center gap-1.5 cursor-pointer flex-1 sm:flex-initial text-center ${

@@ -859,15 +859,45 @@ export class FleetStore {
     this.saveState();
   }
 
-  public toggleVehicleStatus(vehicleId: string, newStatus: 'available' | 'maintenance') {
+  public toggleVehicleStatus(vehicleId: string, newStatus: 'available' | 'maintenance' | 'inactive') {
     this.vehicles = this.vehicles.map(v => {
       if (v.id === vehicleId) {
         if (v.status === 'in_use') return v;
-        return { ...v, status: newStatus };
+        return { 
+          ...v, 
+          status: newStatus,
+          isActive: newStatus !== 'inactive'
+        };
       }
       return v;
     });
     this.saveState();
+  }
+
+  public toggleVehicleActive(vehicleId: string): { success: boolean, message: string } {
+    const vehicle = this.vehicles.find(v => v.id === vehicleId);
+    if (!vehicle) {
+      return { success: false, message: 'Veículo não encontrado.' };
+    }
+    if (vehicle.status === 'in_use') {
+      return { success: false, message: 'Não é possível inativar um veículo em viagem ativa.' };
+    }
+    const newStatus = vehicle.status === 'inactive' ? 'available' : 'inactive';
+    this.vehicles = this.vehicles.map(v => {
+      if (v.id === vehicleId) {
+        return {
+          ...v,
+          status: newStatus,
+          isActive: newStatus !== 'inactive'
+        };
+      }
+      return v;
+    });
+    this.saveState();
+    return {
+      success: true,
+      message: `Veículo ${vehicle.plate} ${newStatus === 'inactive' ? 'inativado' : 'reativado'} com sucesso!`
+    };
   }
 
   public sendVehicleToMaintenance(vehicleId: string, reason: string): { success: boolean, message: string } {
