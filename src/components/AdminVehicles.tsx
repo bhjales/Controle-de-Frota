@@ -24,6 +24,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [initialKm, setInitialKm] = useState(0);
   const [category, setCategory] = useState<string>(store.vehicleCategories[0]?.name || '');
   const [selectedWorkId, setSelectedWorkId] = useState('');
+  const [tankCapacity, setTankCapacity] = useState<string>('');
   const [status, setStatus] = useState<'available' | 'maintenance' | 'inactive'>('available');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -38,6 +39,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setInitialKm(vehicle.currentKm);
     setCategory(vehicle.category || store.vehicleCategories[0]?.name || '');
     setSelectedWorkId(vehicle.workId || '');
+    setTankCapacity(vehicle.tankCapacityLiters ? vehicle.tankCapacityLiters.toString() : '');
     setStatus(vehicle.status === 'inactive' ? 'inactive' : vehicle.status === 'maintenance' ? 'maintenance' : 'available');
     setFormError('');
     setFormSuccess('');
@@ -55,6 +57,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setInitialKm(0);
     setCategory(store.vehicleCategories[0]?.name || '');
     setSelectedWorkId('');
+    setTankCapacity('');
     setStatus('available');
     setFormError('');
     setFormSuccess('');
@@ -96,6 +99,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
       }
 
       const finalStatus = editingVehicle.status === 'in_use' ? 'in_use' : status;
+      const parsedTank = tankCapacity.trim() !== '' ? Number(tankCapacity) : undefined;
       const updatedVehicle: Vehicle = {
         ...editingVehicle,
         brand: brand.trim(),
@@ -107,6 +111,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         workId: matchedWork?.id,
         workName: matchedWork?.name,
         category: category,
+        tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
         status: finalStatus,
         isActive: finalStatus !== 'inactive'
       };
@@ -117,6 +122,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         handleCancelForm();
       }, 1500);
     } else {
+      const parsedTank = tankCapacity.trim() !== '' ? Number(tankCapacity) : undefined;
       const result = store.addVehicle({
         brand: brand.trim(),
         model: model.trim(),
@@ -126,7 +132,8 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         currentKm: Number(initialKm),
         workId: matchedWork?.id,
         workName: matchedWork?.name,
-        category: category
+        category: category,
+        tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined
       });
 
       if (result.success) {
@@ -372,6 +379,18 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               />
             </div>
 
+            <div>
+              <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Capacidade do Tanque (Litros)</label>
+              <input
+                type="number"
+                placeholder="Ex: 60, 80, 200 L"
+                value={tankCapacity}
+                onChange={(e) => setTankCapacity(e.target.value)}
+                className="w-full text-sm bg-[#F8FAFC] focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-2.5 outline-none transition-all font-mono font-bold text-blue-900"
+              />
+              <span className="text-[9px] text-slate-400 block mt-0.5">Usado para limitar o abastecimento máximo por vez.</span>
+            </div>
+
              <div>
               <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Categoria *</label>
               <select
@@ -612,12 +631,12 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                       <span className="font-bold text-slate-800">{vehicle.year}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Cor</span>
-                      <span className="font-bold text-slate-800">{vehicle.color}</span>
-                    </div>
-                    <div>
                       <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Odômetro</span>
                       <span className="font-bold text-slate-800 font-mono">{vehicle.currentKm.toLocaleString()} km</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Tanque</span>
+                      <span className="font-bold text-blue-800 font-mono">{vehicle.tankCapacityLiters ? `${vehicle.tankCapacityLiters} L` : 'Não def.'}</span>
                     </div>
                   </div>
 

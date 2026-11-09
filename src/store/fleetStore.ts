@@ -1958,6 +1958,16 @@ export class FleetStore {
     if (!data.vehicleId) return { success: false, message: 'Selecione o veículo a ser abastecido.' };
     if (!data.liters || data.liters <= 0) return { success: false, message: 'Informe a quantidade em litros abastecida.' };
 
+    const targetVehicle = this.vehicles.find(v => v.id === data.vehicleId);
+    if (targetVehicle && targetVehicle.tankCapacityLiters && targetVehicle.tankCapacityLiters > 0) {
+      if (Number(data.liters) > targetVehicle.tankCapacityLiters) {
+        return {
+          success: false,
+          message: `A quantidade informada (${data.liters} L) excede a capacidade máxima do tanque do veículo ${targetVehicle.plate} (${targetVehicle.tankCapacityLiters} Litros).`
+        };
+      }
+    }
+
     let calculatedCost = 0;
     let finalUnitCost = data.unitCost;
     let finalTotalCost = data.totalCost;

@@ -55,6 +55,7 @@ export interface Vehicle {
   maintenanceSentAt?: string;
   maintenanceHistory?: MaintenanceLog[];
   category?: string;
+  tankCapacityLiters?: number; // Tamanho do tanque em Litros
 }
 
 export interface VehicleCategory {
