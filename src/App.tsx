@@ -72,7 +72,9 @@ export default function App() {
   // Set correct active view tab on loading / change session
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.role === 'gerencial') {
+      if (currentUser.role === 'abastecedor') {
+        setActiveTab('fuel');
+      } else if (currentUser.role === 'gerencial') {
         setActiveTab('manager-dashboard');
       } else if (currentUser.role === 'admin' && activeTab === 'my-trips') {
         setActiveTab('drivers');
@@ -103,7 +105,9 @@ export default function App() {
       setAuthSuccess('Bem-vindo de volta! Acessando o sistema...');
       setLoginId('');
       setLoginPassword('');
-      if (res.user?.role === 'admin') {
+      if (res.user?.role === 'abastecedor') {
+        setActiveTab('fuel');
+      } else if (res.user?.role === 'admin') {
         setActiveTab('drivers');
       } else if (res.user?.role === 'gerencial') {
         setActiveTab('manager-dashboard');
@@ -300,7 +304,7 @@ export default function App() {
                       <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
-                        placeholder="Ex: joao, maria, admin"
+                        placeholder="Ex: admin, abastecedor, joao"
                         value={loginId}
                         onChange={(e) => setLoginId(e.target.value)}
                         className="w-full text-sm pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono"
@@ -343,6 +347,33 @@ export default function App() {
                   >
                     Entrar no Painel
                   </button>
+
+                  {/* Quick Test Demo Credentials */}
+                  <div className="pt-3 border-t border-slate-100">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Acesso Rápido para Testes:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginId('admin');
+                          setLoginPassword('123456');
+                        }}
+                        className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold text-center transition-colors cursor-pointer"
+                      >
+                        🛡️ Admin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoginId('abastecedor');
+                          setLoginPassword('123456');
+                        }}
+                        className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60 rounded-lg text-[11px] font-bold text-center transition-colors cursor-pointer"
+                      >
+                        ⛽ Abastecedor
+                      </button>
+                    </div>
+                  </div>
                 </form>
               ) : (
                 /* TAB B: ADMIN SIGNUP */
@@ -460,7 +491,7 @@ export default function App() {
              ======================================================== */
           <div className="space-y-6 animate-fade-in">
             {/* Conditional Module rendering based on Active Tab */}
-            {activeTab === 'my-trips' && currentUser.role !== 'gerencial' && (
+            {activeTab === 'my-trips' && currentUser.role !== 'gerencial' && currentUser.role !== 'abastecedor' && (
               <DriverTrips
                 vehicles={vehicles}
                 trips={trips}
@@ -470,7 +501,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'manager-dashboard' && (
+            {activeTab === 'manager-dashboard' && currentUser.role !== 'abastecedor' && (currentUser.role === 'admin' || currentUser.role === 'gerencial') && (
               <ManagerDashboard
                 currentUser={currentUser}
                 vehicles={vehicles}
@@ -511,7 +542,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'works' && currentUser?.role !== 'driver' && (
+            {activeTab === 'works' && currentUser?.role !== 'driver' && currentUser?.role !== 'abastecedor' && (
               <AdminWorks
                 currentUser={currentUser}
                 works={works}
@@ -526,7 +557,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'history' && (
+            {activeTab === 'history' && currentUser.role !== 'abastecedor' && (
               <TripHistory
                 trips={trips}
                 currentUser={currentUser}
@@ -534,7 +565,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'equipments' && currentUser.role !== 'gerencial' && (
+            {activeTab === 'equipments' && currentUser.role !== 'gerencial' && currentUser.role !== 'abastecedor' && (
               <EquipmentControl
                 currentUser={currentUser}
                 equipments={equipments}
@@ -544,7 +575,7 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'suppliers' && currentUser?.role !== 'driver' && (
+            {activeTab === 'suppliers' && currentUser?.role !== 'driver' && currentUser?.role !== 'abastecedor' && (
               <AdminSuppliers
                 currentUser={currentUser}
                 suppliers={suppliers}
@@ -566,28 +597,39 @@ export default function App() {
             )}
 
             {/* Safety Fallback: if user tries to breach restricted tab by state hacking */}
-            {(((activeTab === 'vehicles' || activeTab === 'drivers') && currentUser.role !== 'admin') ||
-              ((activeTab === 'suppliers' || activeTab === 'fuel') && currentUser.role === 'driver') ||
-              ((activeTab === 'my-trips' || activeTab === 'equipments') && currentUser.role === 'gerencial')) && (
+            {(((activeTab === 'vehicles' || activeTab === 'drivers' || activeTab === 'categories') && currentUser.role !== 'admin') ||
+              ((activeTab === 'suppliers' || activeTab === 'fuel' || activeTab === 'works') && currentUser.role === 'driver') ||
+              ((activeTab === 'my-trips' || activeTab === 'equipments') && currentUser.role === 'gerencial') ||
+              (currentUser.role === 'abastecedor' && activeTab !== 'fuel')) && (
               <div className="p-8 bg-red-50 border border-red-200 text-red-800 rounded-3xl text-center space-y-2 animate-bounce">
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
                 <h4 className="text-base font-bold">Acesso Restrito</h4>
                 <p className="text-xs text-slate-500">
-                  {currentUser.role === 'gerencial'
-                    ? 'Usuários com perfil gerencial possuem acesso exclusivo de apenas leitura ao Dashboard Resumo e Relatórios de Viagens.'
-                    : 'Apenas usuários administradores cadastrados podem gerenciar a frota de veículos e motoristas do pátio.'}
+                  {currentUser.role === 'abastecedor'
+                    ? 'Usuários com perfil de Controle de Abastecimento possuem acesso exclusivo ao módulo de Combustíveis da frota.'
+                    : currentUser.role === 'gerencial'
+                    ? 'Usuários com perfil gerencial possuem acesso exclusivo de apenas leitura ao Dashboard Resumo e Relatórios.'
+                    : 'Apenas usuários autorizados podem gerenciar estes módulos do pátio.'}
                 </p>
                 <button
                   onClick={() => {
-                    if (currentUser.role === 'gerencial') {
+                    if (currentUser.role === 'abastecedor') {
+                      setActiveTab('fuel');
+                    } else if (currentUser.role === 'gerencial') {
                       setActiveTab('manager-dashboard');
+                    } else if (currentUser.role === 'admin') {
+                      setActiveTab('drivers');
                     } else {
                       setActiveTab('my-trips');
                     }
                   }}
                   className="mt-3 text-xs bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold"
                 >
-                  {currentUser.role === 'gerencial' ? 'Ir para Dashboard Resumo' : 'Retornar para Minha Viagem'}
+                  {currentUser.role === 'abastecedor'
+                    ? 'Ir para Controle de Combustível'
+                    : currentUser.role === 'gerencial'
+                    ? 'Ir para Dashboard Resumo'
+                    : 'Retornar para Minha Viagem'}
                 </button>
               </div>
             )}

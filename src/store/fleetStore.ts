@@ -228,7 +228,39 @@ export class FleetStore {
         fetchTable('fuel_dispenses')
       ]);
 
-      if (users !== null) this.users = users as User[];
+      if (users !== null) {
+        this.users = users as User[];
+        if (!this.users.some(u => u.loginId === 'admin' || u.role === 'admin')) {
+          this.users.unshift({
+            id: 'user-admin-default',
+            loginId: 'admin',
+            name: 'Administrador Geral',
+            email: 'admin@frota.com.br',
+            cpf: '111.111.111-11',
+            licenseNumber: 'Não Aplicável',
+            role: 'admin',
+            isActive: true,
+            password: '123456',
+            isApproved: true,
+            createdAt: new Date().toISOString()
+          });
+        }
+        if (!this.users.some(u => u.loginId === 'abastecedor' || u.role === 'abastecedor')) {
+          this.users.push({
+            id: 'user-abastecedor-demo',
+            loginId: 'abastecedor',
+            name: 'Operador de Abastecimento',
+            email: 'abastecedor@frota.com.br',
+            cpf: '000.000.000-00',
+            licenseNumber: 'Não Aplicável',
+            role: 'abastecedor',
+            isActive: true,
+            password: '123456',
+            isApproved: true,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
       if (works !== null) this.works = works as ConstructionWork[];
       if (equipmentTypes !== null) this.equipmentTypes = equipmentTypes as EquipmentType[];
       if (vehicleCategories !== null) this.vehicleCategories = vehicleCategories as VehicleCategory[];
@@ -600,6 +632,44 @@ export class FleetStore {
       }
     }
 
+    // Ensure default admin user exists
+    if (!this.users.some(u => u.loginId === 'admin' || u.role === 'admin')) {
+      const demoAdmin: User = {
+        id: 'user-admin-default',
+        loginId: 'admin',
+        name: 'Administrador Geral',
+        email: 'admin@frota.com.br',
+        cpf: '111.111.111-11',
+        licenseNumber: 'Não Aplicável',
+        role: 'admin',
+        isActive: true,
+        password: '123456',
+        isApproved: true,
+        createdAt: new Date().toISOString()
+      };
+      this.users.unshift(demoAdmin);
+      migrated = true;
+    }
+
+    // Ensure default demo abastecedor user exists for instant testing
+    if (!this.users.some(u => u.loginId === 'abastecedor' || u.role === 'abastecedor')) {
+      const demoAbastecedor: User = {
+        id: 'user-abastecedor-demo',
+        loginId: 'abastecedor',
+        name: 'Operador de Abastecimento',
+        email: 'abastecedor@frota.com.br',
+        cpf: '000.000.000-00',
+        licenseNumber: 'Não Aplicável',
+        role: 'abastecedor',
+        isActive: true,
+        password: '123456',
+        isApproved: true,
+        createdAt: new Date().toISOString()
+      };
+      this.users.push(demoAbastecedor);
+      migrated = true;
+    }
+
     if (migrated) {
       this.saveState();
     }
@@ -672,6 +742,8 @@ export class FleetStore {
       determinedRole = 'admin';
     } else if (normalizedLogin.includes('admin')) {
       determinedRole = 'admin';
+    } else if (normalizedLogin.includes('abastec') || normalizedLogin.includes('frentista')) {
+      determinedRole = 'abastecedor';
     }
 
     const newUser: User = {
@@ -957,6 +1029,7 @@ export class FleetStore {
     let cargoNome = 'Motorista';
     if (newRole === 'admin') cargoNome = 'Administrador';
     if (newRole === 'gerencial') cargoNome = 'Gerencial (Coordenador)';
+    if (newRole === 'abastecedor') cargoNome = 'Controle de Abastecimento';
     
     return { success: true, message: `O cargo de ${driver.name} foi atualizado para ${cargoNome} com sucesso.` };
   }

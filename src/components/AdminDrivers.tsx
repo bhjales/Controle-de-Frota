@@ -12,7 +12,8 @@ import {
   Fingerprint, 
   AlertCircle, 
   Sparkles,
-  Edit
+  Edit,
+  Fuel
 } from 'lucide-react';
 import { User, Vehicle, Equipment, UserRole } from '../types';
 import { FleetStore } from '../store/fleetStore';
@@ -415,6 +416,7 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                 className="w-full text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-2.5 outline-none transition-all font-bold text-slate-700"
               >
                 <option value="driver">Motorista / Operador (Padrão)</option>
+                <option value="abastecedor">Controle de Abastecimento (Apenas Combustível)</option>
                 <option value="gerencial">Coordenador / Gerencial (Dashboard e Relatórios)</option>
                 <option value="admin">Administrador do Sistema (Acesso Total)</option>
               </select>
@@ -509,7 +511,7 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                   <div className="space-y-2">
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-150">
                       <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-250/20">
-                        {driver.role === 'admin' ? '🛡️ ADM SOLICITADO' : '👤 MOTORISTA'}
+                        {driver.role === 'admin' ? '🛡️ ADM SOLICITADO' : driver.role === 'abastecedor' ? '⛽ ABASTECEDOR' : driver.role === 'gerencial' ? '📊 GERENCIAL' : '👤 MOTORISTA'}
                       </span>
                       <span className="text-[10px] text-slate-400 font-mono">
                         {new Date(driver.createdAt).toLocaleDateString('pt-BR')}
@@ -600,6 +602,8 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                     ? 'border-emerald-250 bg-emerald-500/5'
                     : driver.role === 'gerencial'
                     ? 'border-purple-250 bg-purple-500/5'
+                    : driver.role === 'abastecedor'
+                    ? 'border-amber-250 bg-amber-500/5'
                     : 'border-slate-200'
                 }`}
               >
@@ -621,6 +625,11 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 font-mono">
                           <Shield className="w-3 h-3 text-purple-600" />
                           Gerencial
+                        </span>
+                      ) : driver.role === 'abastecedor' ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 font-mono">
+                          <Fuel className="w-3 h-3 text-amber-600" />
+                          Abastecedor
                         </span>
                       ) : (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-250 font-mono">
@@ -705,6 +714,7 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                         className="w-full text-xs font-bold bg-transparent text-slate-700 outline-none cursor-pointer disabled:opacity-50 disabled:pointer-events-none font-sans"
                       >
                         <option value="driver">Motorista</option>
+                        <option value="abastecedor">Abastecedor</option>
                         <option value="gerencial">Gerencial</option>
                         <option value="admin">Admin</option>
                       </select>
@@ -853,6 +863,7 @@ export function AdminDrivers({ drivers, currentUser, store, vehicles, equipments
                               className="w-full text-sm bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-3.5 py-2 outline-none transition-all font-bold text-slate-700"
                             >
                               <option value="driver">Motorista</option>
+                              <option value="abastecedor">Controle de Abastecimento</option>
                               <option value="gerencial">Gerencial</option>
                               <option value="admin">Administrador</option>
                             </select>

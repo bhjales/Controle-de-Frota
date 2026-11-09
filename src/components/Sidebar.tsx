@@ -47,7 +47,7 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
       mobileHtmlId: 'tab_my_trip_mobile_btn',
       label: 'Minha Viagem',
       icon: Compass,
-      roleAllowed: (role) => role !== 'gerencial',
+      roleAllowed: (role) => role !== 'gerencial' && role !== 'abastecedor',
       section: 'operacao',
     },
     {
@@ -56,7 +56,7 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
       mobileHtmlId: 'tab_equipments_mobile_btn',
       label: 'Maquinários / Horímetro',
       icon: Gauge,
-      roleAllowed: (role) => role !== 'gerencial',
+      roleAllowed: (role) => role !== 'gerencial' && role !== 'abastecedor',
       section: 'operacao',
     },
     {
@@ -65,7 +65,7 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
       mobileHtmlId: 'tab_history_mobile_btn',
       label: 'Relatórios de Viagens',
       icon: ClipboardList,
-      roleAllowed: () => true,
+      roleAllowed: (role) => role !== 'abastecedor',
       section: 'operacao',
     },
 
@@ -85,7 +85,7 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
       mobileHtmlId: 'tab_works_mobile_btn',
       label: 'Obras',
       icon: Building2,
-      roleAllowed: (role) => role !== 'driver',
+      roleAllowed: (role) => role !== 'driver' && role !== 'abastecedor',
       section: 'gestao',
     },
     {
@@ -103,7 +103,7 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
       mobileHtmlId: 'tab_suppliers_mobile_btn',
       label: 'Fornecedores',
       icon: Building,
-      roleAllowed: (role) => role !== 'driver',
+      roleAllowed: (role) => role !== 'driver' && role !== 'abastecedor',
       section: 'gestao',
     },
 
@@ -352,6 +352,11 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono leading-none">
                       <Shield className="w-2.5 h-2.5" />
                       GERENCIAL
+                    </span>
+                  ) : currentUser.role === 'abastecedor' ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono leading-none">
+                      <Fuel className="w-2.5 h-2.5" />
+                      ABASTECEDOR
                     </span>
                   ) : (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-bold bg-slate-800 text-slate-300 border border-slate-700 font-mono leading-none">
