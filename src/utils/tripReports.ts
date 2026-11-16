@@ -189,7 +189,7 @@ export function exportTripReportPDF(options: TripReportOptions) {
   // Calculate Primary Metrics
   const completedTrips = filteredTrips.filter(t => t.status === 'completed');
   const activeTrips = filteredTrips.filter(t => t.status === 'active');
-  const totalKmDriven = completedTrips.reduce((acc, t) => acc + (t.kmDriven || 0), 0);
+  const totalKmDriven = completedTrips.reduce((acc, t) => acc + (Number(t.kmDriven) || 0), 0);
   const avgKmPerTrip = completedTrips.length > 0 ? Math.round(totalKmDriven / completedTrips.length) : 0;
   
   const uniqueVehicles = new Set(filteredTrips.map(t => t.vehicleId)).size;
@@ -306,7 +306,7 @@ export function exportTripReportPDF(options: TripReportOptions) {
     if (t.status === 'active') existing.activeCount += 1;
     if (t.status === 'completed') {
       existing.completedCount += 1;
-      existing.totalKm += (t.kmDriven || 0);
+      existing.totalKm += (Number(t.kmDriven) || 0);
     }
 
     vehicleStatsMap.set(t.vehicleId, existing);
@@ -316,7 +316,9 @@ export function exportTripReportPDF(options: TripReportOptions) {
     .sort((a, b) => b.totalKm - a.totalKm)
     .map(v => {
       const avgKm = v.completedCount > 0 ? Math.round(v.totalKm / v.completedCount) : 0;
-      const sharePct = totalKmDriven > 0 ? ((v.totalKm / totalKmDriven) * 100).toFixed(1) : '0.0';
+      const sharePct = totalKmDriven > 0 
+        ? `${((v.totalKm / totalKmDriven) * 100).toFixed(1)}%` 
+        : `${((v.tripCount / Math.max(filteredTrips.length, 1)) * 100).toFixed(1)}%`;
       return [
         v.plate,
         v.model,
@@ -326,7 +328,7 @@ export function exportTripReportPDF(options: TripReportOptions) {
         v.activeCount.toString(),
         `${v.totalKm.toLocaleString('pt-BR')} km`,
         `${avgKm.toLocaleString('pt-BR')} km`,
-        `${sharePct}%`
+        sharePct
       ];
     });
 
@@ -348,13 +350,13 @@ export function exportTripReportPDF(options: TripReportOptions) {
     columnStyles: {
       0: { cellWidth: 26, fontStyle: 'bold' },
       1: { cellWidth: 54 },
-      2: { cellWidth: 30 },
+      2: { cellWidth: 28 },
       3: { cellWidth: 24, halign: 'center' },
       4: { cellWidth: 24, halign: 'center' },
       5: { cellWidth: 24, halign: 'center' },
       6: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
       7: { cellWidth: 30, halign: 'right' },
-      8: { cellWidth: 31, halign: 'right' }
+      8: { cellWidth: 33, halign: 'center' }
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252]
@@ -412,7 +414,7 @@ export function exportTripReportPDF(options: TripReportOptions) {
     existing.tripCount += 1;
     if (t.status === 'completed') {
       existing.completedCount += 1;
-      existing.totalKm += (t.kmDriven || 0);
+      existing.totalKm += (Number(t.kmDriven) || 0);
     }
     if (t.status === 'active') {
       existing.activeCount += 1;
@@ -424,7 +426,9 @@ export function exportTripReportPDF(options: TripReportOptions) {
   const workRows = Array.from(workStatsMap.values())
     .sort((a, b) => b.totalKm - a.totalKm)
     .map(w => {
-      const sharePct = totalKmDriven > 0 ? ((w.totalKm / totalKmDriven) * 100).toFixed(1) : '0.0';
+      const sharePct = totalKmDriven > 0 
+        ? `${((w.totalKm / totalKmDriven) * 100).toFixed(1)}%` 
+        : `${((w.tripCount / Math.max(filteredTrips.length, 1)) * 100).toFixed(1)}%`;
       return [
         w.name,
         w.location,
@@ -432,7 +436,7 @@ export function exportTripReportPDF(options: TripReportOptions) {
         w.completedCount.toString(),
         w.activeCount.toString(),
         `${w.totalKm.toLocaleString('pt-BR')} km`,
-        `${sharePct}%`
+        sharePct
       ];
     });
 
@@ -452,13 +456,13 @@ export function exportTripReportPDF(options: TripReportOptions) {
       font: 'helvetica'
     },
     columnStyles: {
-      0: { cellWidth: 70, fontStyle: 'bold' },
-      1: { cellWidth: 50 },
-      2: { cellWidth: 35, halign: 'center' },
-      3: { cellWidth: 35, halign: 'center' },
-      4: { cellWidth: 35, halign: 'center' },
-      5: { cellWidth: 48, halign: 'right', fontStyle: 'bold' },
-      6: { cellWidth: 0, halign: 'right' }
+      0: { cellWidth: 64, fontStyle: 'bold' },
+      1: { cellWidth: 46 },
+      2: { cellWidth: 28, halign: 'center' },
+      3: { cellWidth: 26, halign: 'center' },
+      4: { cellWidth: 26, halign: 'center' },
+      5: { cellWidth: 45, halign: 'right', fontStyle: 'bold' },
+      6: { cellWidth: 38, halign: 'center' }
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252]
