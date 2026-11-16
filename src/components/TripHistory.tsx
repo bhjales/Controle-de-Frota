@@ -1,7 +1,35 @@
 import React, { useState } from 'react';
-import { Search, MapPin, Calendar, Clock, Gauge, Fuel, Eye, Film, Trash2, CheckCircle, Navigation, Info, TrendingUp, Compass, Award, Hourglass } from 'lucide-react';
+import { 
+  Search, 
+  MapPin, 
+  Calendar, 
+  Clock, 
+  Gauge, 
+  Fuel, 
+  Eye, 
+  Film, 
+  Trash2, 
+  CheckCircle, 
+  CheckCircle2,
+  Navigation, 
+  Info, 
+  TrendingUp, 
+  Compass, 
+  Award, 
+  Hourglass,
+  FileText,
+  Download,
+  Filter,
+  RotateCcw,
+  FileSpreadsheet,
+  Car,
+  Building2,
+  AlertCircle,
+  X
+} from 'lucide-react';
 import { Trip, User, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
+import { exportTripReportPDF, exportTripsConsolidatedCSV, getFilteredTripData } from '../utils/tripReports';
 import L from 'leaflet';
 
 interface TripHistoryProps {
@@ -12,8 +40,22 @@ interface TripHistoryProps {
 
 export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
   const [search, setSearch] = useState('');
+  const [selectedVehicle, setSelectedVehicle] = useState('all');
+  const [selectedWork, setSelectedWork] = useState('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'active'>('all');
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    setFeedback({ type, message });
+    setTimeout(() => {
+      setFeedback(null);
+    }, 5000);
+  };
 
   const handleDeleteTrip = (tripId: string) => {
     const isConfirmed = window.confirm('Deseja excluir este registro de viagem? O veículo associado retornará ao pátio.');
@@ -22,7 +64,7 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
     }
   };
 
-  // Filter based on credentials (Drivers only see their personal trips, Admin sees everything)
+  // Filter based on credentials (Drivers only see their personal trips, Admin/Gerencial sees everything)
   const isDriver = currentUser?.role === 'driver';
   
   const accessibleTrips = trips.filter(t => {
@@ -32,24 +74,101 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
     return true; // Admin views all records
   });
 
-  // Filter based on search input and sort by date descending
-  const filteredTrips = accessibleTrips.filter(t => {
-    const query = search.toLowerCase();
-    return (
-      t.driverName.toLowerCase().includes(query) ||
-      t.vehicleModelPlate.toLowerCase().includes(query) ||
-      t.checkIn.destination.toLowerCase().includes(query) ||
-      t.checkIn.reason.toLowerCase().includes(query)
-    );
-  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Filter based on Vehicle, Work, Period, Status, Search
+  const filteredTrips = getFilteredTripData({
+    trips: accessibleTrips,
+    works: store.works,
+    vehicles: store.vehicles,
+    currentUser,
+    selectedVehicleId: selectedVehicle,
+    selectedWorkId: selectedWork,
+    startDate,
+    endDate,
+    statusFilter,
+    searchQuery: search
+  });
 
   // --- STATS ACCUMULATORS ---
-  const completedTrips = accessibleTrips.filter(t => t.status === 'completed');
-  const activeTripsCount = accessibleTrips.filter(t => t.status === 'active').length;
+  const completedTrips = filteredTrips.filter(t => t.status === 'completed');
+  const activeTripsCount = filteredTrips.filter(t => t.status === 'active').length;
   
   // Sum up Kms Rodados
   const totalKmDriven = completedTrips.reduce((acc, t) => acc + (t.kmDriven || 0), 0);
   const avgKmPerTrip = completedTrips.length > 0 ? Math.round(totalKmDriven / completedTrips.length) : 0;
+
+  // Export handlers
+  const handleExportPDF = () => {
+    try {
+      setIsExporting(true);
+      exportTripReportPDF({
+        trips: accessibleTrips,
+        works: store.works,
+        vehicles: store.vehicles,
+        currentUser,
+        selectedVehicleId: selectedVehicle,
+        selectedWorkId: selectedWork,
+        startDate,
+        endDate,
+        statusFilter,
+        searchQuery: search
+      });
+      showNotification('success', 'Relatório gerencial de viagens em PDF exportado com sucesso!');
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Erro ao gerar o relatório de viagens em PDF.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    try {
+      exportTripsConsolidatedCSV({
+        trips: accessibleTrips,
+        works: store.works,
+        vehicles: store.vehicles,
+        currentUser,
+        selectedVehicleId: selectedVehicle,
+        selectedWorkId: selectedWork,
+        startDate,
+        endDate,
+        statusFilter,
+        searchQuery: search
+      });
+      showNotification('success', 'Planilha detalhada de viagens exportada com sucesso!');
+    } catch (err) {
+      console.error(err);
+      showNotification('error', 'Erro ao exportar a planilha CSV.');
+    }
+  };
+
+  const handlePresetDate = (days: number) => {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const start = new Date();
+    start.setDate(today.getDate() - days);
+    setStartDate(start.toISOString().slice(0, 10));
+    setEndDate(todayStr);
+  };
+
+  const handleThisMonth = () => {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    setStartDate(firstDay.toISOString().slice(0, 10));
+    setEndDate(todayStr);
+  };
+
+  const handleClearFilters = () => {
+    setSelectedVehicle('all');
+    setSelectedWork('all');
+    setStartDate('');
+    setEndDate('');
+    setStatusFilter('all');
+    setSearch('');
+  };
+
+  const hasActiveFilters = selectedVehicle !== 'all' || selectedWork !== 'all' || !!startDate || !!endDate || statusFilter !== 'all' || !!search;
 
   return (
     <div id="trip_history_view" className="space-y-6">
@@ -162,30 +281,253 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
         )}
       </div>
 
-      {/* Main Panel */}
-      <div className="space-y-4">
-        {/* Banner with filters */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      {/* Global Feedback notification */}
+      {feedback && (
+        <div className={`p-4 rounded-2xl flex items-center justify-between border shadow-sm transition-all duration-300 ${
+          feedback.type === 'success' 
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+            : 'bg-rose-50 border-rose-200 text-rose-800'
+        }`}>
+          <div className="flex items-center gap-2.5">
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="text-xs font-semibold">{feedback.message}</span>
+          </div>
+          <button 
+            onClick={() => setFeedback(null)}
+            className="p-1 hover:bg-black/5 rounded-lg text-slate-500 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* 📄 Central de Relatórios de Viagens (PDF & Filtros Operacionais) */}
+      <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 pb-4">
           <div>
-            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 font-display">
-              📂 Histórico Geral de Movimentação
-            </h3>
-            <p className="text-xs text-slate-500">
-              {isDriver ? 'Mostrando suas movimentações individuais registradas.' : 'Registro unificado de todos os itinerários da frota.'}
+            <div className="flex items-center gap-2">
+              <span className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                <FileText className="w-5 h-5" />
+              </span>
+              <h3 className="text-lg font-bold text-slate-900 font-display">
+                Central de Relatórios de Viagens (Exportação PDF)
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Filtre viagens por veículo, canteiro de obra e período cronológico para emitir relatórios executivos auditados em PDF.
             </p>
           </div>
 
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Filtrar por motorista, veículo ou destino..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-xs bg-[#F8FAFC] hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-medium"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow cursor-pointer disabled:opacity-50"
+              title="Gerar e Baixar Relatório em PDF"
+            >
+              <Download className="w-4 h-4 text-emerald-400" />
+              <span>Exportar Relatório PDF ({filteredTrips.length})</span>
+            </button>
+
+            <button
+              onClick={handleExportCSV}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              title="Exportar dados tabulados em CSV"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span className="hidden sm:inline">Planilha CSV</span>
+            </button>
           </div>
         </div>
+
+        {/* 🎛️ Filtros Avançados: Veículo, Obra, Período, Status e Busca */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1. Filtro por Veículo */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <Car className="w-3.5 h-3.5 text-blue-600" />
+              Filtrar por Veículo
+            </label>
+            <select
+              value={selectedVehicle}
+              onChange={(e) => setSelectedVehicle(e.target.value)}
+              className="w-full text-xs px-3 py-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
+            >
+              <option value="all">🚗 Todos os Veículos ({store.vehicles.length})</option>
+              {store.vehicles.map(v => (
+                <option key={v.id} value={v.id}>
+                  [{v.plate}] {v.brand} {v.model} ({v.category || 'Geral'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 2. Filtro por Obra */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+              Filtrar por Obra
+            </label>
+            <select
+              value={selectedWork}
+              onChange={(e) => setSelectedWork(e.target.value)}
+              className="w-full text-xs px-3 py-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
+            >
+              <option value="all">🏗️ Todas as Obras ({store.works.length})</option>
+              {store.works.map(w => (
+                <option key={w.id} value={w.id}>
+                  {w.name} ({w.city}/{w.state})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 3. Filtro por Status */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+              Status da Viagem
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="w-full text-xs px-3 py-2.5 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all cursor-pointer"
+            >
+              <option value="all">Todos os Status</option>
+              <option value="completed">Concluídas (Checkout Realizado)</option>
+              <option value="active">Em Trânsito (Rodando Agora)</option>
+            </select>
+          </div>
+
+          {/* 4. Busca por texto */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+              <Search className="w-3.5 h-3.5 text-slate-500" />
+              Buscar Condutor / Rota
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Ex: Condutor, destino, placa..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-2.5 text-xs bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-xl font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+        </div>
+
+        {/* 📅 Filtro por Período & Atalhos Rápidos */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-600 font-mono flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-amber-600" />
+              Período:
+            </span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 outline-none focus:border-blue-500 font-medium"
+                title="Data Inicial"
+              />
+              <span className="text-slate-400 font-mono">até</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg text-slate-700 outline-none focus:border-blue-500 font-medium"
+                title="Data Final"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] text-slate-400 uppercase font-mono font-bold mr-1">Atalhos:</span>
+            <button
+              onClick={() => handlePresetDate(0)}
+              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer"
+            >
+              Hoje
+            </button>
+            <button
+              onClick={() => handlePresetDate(7)}
+              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer"
+            >
+              7 Dias
+            </button>
+            <button
+              onClick={() => handlePresetDate(30)}
+              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer"
+            >
+              30 Dias
+            </button>
+            <button
+              onClick={handleThisMonth}
+              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 transition-colors cursor-pointer"
+            >
+              Este Mês
+            </button>
+
+            {hasActiveFilters && (
+              <button
+                onClick={handleClearFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ml-1"
+                title="Limpar todos os filtros aplicados"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Limpar Filtros
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Badges de filtros ativos */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2">
+            <span className="text-[10px] uppercase font-mono font-bold text-slate-400">Filtros aplicados:</span>
+            {selectedVehicle !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                Veículo: {store.vehicles.find(v => v.id === selectedVehicle)?.plate || selectedVehicle}
+                <button onClick={() => setSelectedVehicle('all')} className="hover:text-blue-900 cursor-pointer">×</button>
+              </span>
+            )}
+            {selectedWork !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Obra: {store.works.find(w => w.id === selectedWork)?.name || selectedWork}
+                <button onClick={() => setSelectedWork('all')} className="hover:text-emerald-900 cursor-pointer">×</button>
+              </span>
+            )}
+            {statusFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                Status: {statusFilter === 'completed' ? 'Concluídas' : 'Em Trânsito'}
+                <button onClick={() => setStatusFilter('all')} className="hover:text-indigo-900 cursor-pointer">×</button>
+              </span>
+            )}
+            {(startDate || endDate) && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                Período: {startDate || '...'} até {endDate || '...'}
+                <button onClick={() => { setStartDate(''); setEndDate(''); }} className="hover:text-amber-900 cursor-pointer">×</button>
+              </span>
+            )}
+            {search && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                Busca: "{search}"
+                <button onClick={() => setSearch('')} className="hover:text-slate-900 cursor-pointer">×</button>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Main Panel */}
+      <div className="space-y-4">
 
         {/* Trips registry */}
         {filteredTrips.length === 0 ? (
