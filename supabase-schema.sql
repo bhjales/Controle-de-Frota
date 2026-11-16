@@ -86,8 +86,10 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
     "lastMaintenanceKm" NUMERIC DEFAULT 0,
     "maintenanceIntervalKm" NUMERIC DEFAULT 10000,
     "nextOilChangeKm" NUMERIC,
-    status TEXT DEFAULT 'available', -- 'available', 'in_use', 'maintenance'
+    status TEXT DEFAULT 'available', -- 'available', 'in_use', 'maintenance', 'inactive'
+    "isActive" BOOLEAN DEFAULT true,
     category TEXT,
+    "tankCapacityLiters" NUMERIC,
     "workId" TEXT REFERENCES public.construction_works(id) ON DELETE SET NULL,
     "workName" TEXT,
     "maintenanceReason" TEXT,
@@ -329,7 +331,9 @@ ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "originState" TEXT;
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "destinationCity" TEXT;
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "destinationState" TEXT;
 
--- Atualização na tabela vehicles (Controle de Logística)
+-- Atualização na tabela vehicles (Controle de Logística, Tanque e Status Ativo)
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN DEFAULT true;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "tankCapacityLiters" NUMERIC;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "hasLogisticsControl" BOOLEAN DEFAULT false;
 
 -- Atualização na tabela logistics_schedules (Obra de Origem, Descrição Livre e Descrição da Carga)
@@ -337,6 +341,9 @@ ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkId" T
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkName" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "programDescription" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "cargoDescription" TEXT;
+
+-- Recarrega o cache de schema do PostgREST/Supabase imediatamente
+NOTIFY pgrst, 'reload schema';
 
 -- ==============================================================================
 -- CRIAÇÃO DE ÍNDICES PARA PERFORMANCE

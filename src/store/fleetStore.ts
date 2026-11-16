@@ -144,6 +144,8 @@ export class FleetStore {
 
   // Snapshot for differential syncing
   private previousState: Record<string, string> = {};
+  private isSyncing = false;
+  private syncQueued = false;
 
   // Listeners list for component re-renders
   private listeners: (() => void)[] = [];
@@ -187,6 +189,9 @@ export class FleetStore {
   }
 
   private async loadFromSupabase() {
+    if (this.isSyncing || this.syncQueued) {
+      return; // Never overwrite pending local changes while sync is in flight
+    }
     try {
       const fetchTable = async (tableName: string) => {
         try {
@@ -344,7 +349,10 @@ export class FleetStore {
       const getSanitizedItems = (colsToExclude: string[]) => {
         return items.map(item => {
           const copy = { ...item };
-          if (table === 'vehicles' || table === 'equipments') {
+          if (table === 'vehicles') {
+            delete copy.maintenanceHistory;
+            copy.hasLogisticsControl = Boolean(copy.hasLogisticsControl);
+          } else if (table === 'equipments') {
             delete copy.maintenanceHistory;
           }
 
@@ -510,6 +518,11 @@ export class FleetStore {
   }
 
   private async backgroundSync() {
+    if (this.isSyncing) {
+      this.syncQueued = true;
+      return;
+    }
+    this.isSyncing = true;
     try {
       // Find differences using getChangedItems
       const cUsers = this.getChangedItems('users', this.users);
@@ -546,10 +559,16 @@ export class FleetStore {
       // Sync maintenance logs
       await this.syncMaintenanceLogs();
 
-      // Update the previous state snapshot after successful sync
+      // Update the previous state snapshot after sync
       this.updatePreviousState();
     } catch (e) {
       console.error("Exception in backgroundSync:", e);
+    } finally {
+      this.isSyncing = false;
+      if (this.syncQueued) {
+        this.syncQueued = false;
+        this.backgroundSync();
+      }
     }
   }
 
@@ -856,6 +875,7 @@ export class FleetStore {
 
     const newVehicle: Vehicle = {
       ...vehicleData,
+      hasLogisticsControl: Boolean(vehicleData.hasLogisticsControl),
       id: plateUpper,
       plate: plateUpper,
       status: 'available',
@@ -868,8 +888,21 @@ export class FleetStore {
   }
 
   public updateVehicle(updatedVehicle: Vehicle) {
-    this.vehicles = this.vehicles.map(v => v.id === updatedVehicle.id ? updatedVehicle : v);
+    const normalized: Vehicle = {
+      ...updatedVehicle,
+      hasLogisticsControl: Boolean(updatedVehicle.hasLogisticsControl)
+    };
+    this.vehicles = this.vehicles.map(v => v.id === normalized.id ? normalized : v);
     this.saveState();
+    supabase
+      .from('vehicles')
+      .update({ hasLogisticsControl: normalized.hasLogisticsControl })
+      .eq('id', normalized.id)
+      .then(({ error }) => {
+        if (error) {
+          console.warn('Supabase update hasLogisticsControl failed:', error.message);
+        }
+      });
   }
 
   public toggleVehicleStatus(vehicleId: string, newStatus: 'available' | 'maintenance' | 'inactive') {
@@ -2092,13 +2125,25 @@ export class FleetStore {
     const vehicle = this.vehicles.find(v => v.id === vehicleId);
     if (!vehicle) return { success: false, message: 'Veículo não encontrado.' };
 
+    const flag = Boolean(enabled);
     this.vehicles = this.vehicles.map(v =>
-      v.id === vehicleId ? { ...v, hasLogisticsControl: enabled } : v
+      v.id === vehicleId ? { ...v, hasLogisticsControl: flag } : v
     );
     this.saveState();
+    supabase
+      .from('vehicles')
+      .update({ hasLogisticsControl: flag })
+      .eq('id', vehicleId)
+      .then(({ error }) => {
+        if (error) {
+          console.warn(
+            `[Supabase] Falha ao atualizar hasLogisticsControl do veículo ${vehicle.plate}: ${error.message}. Execute NOTIFY pgrst, 'reload schema'; no SQL Editor do Supabase.`
+          );
+        }
+      });
     return {
       success: true,
-      message: enabled
+      message: flag
         ? `Controle de Logística ativado para ${vehicle.plate}.`
         : `Controle de Logística desativado para ${vehicle.plate}.`
     };
