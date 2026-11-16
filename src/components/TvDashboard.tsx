@@ -46,6 +46,8 @@ export function TvDashboard({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
   // Clock ticker for live TV display
   useEffect(() => {
     const timer = setInterval(() => {
@@ -54,17 +56,27 @@ export function TvDashboard({
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.warn("Error attempting to enable fullscreen:", err);
-      });
-      setIsFullscreen(true);
+      if (containerRef.current && containerRef.current.requestFullscreen) {
+        containerRef.current.requestFullscreen().catch(err => {
+          console.warn("Error attempting to enable fullscreen:", err);
+        });
+      }
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen();
       }
-      setIsFullscreen(false);
     }
   };
 
@@ -89,7 +101,14 @@ export function TvDashboard({
   const totalFuelConsumed = fuelDispenses.reduce((acc, d) => acc + (Number(d.liters) || 0), 0);
 
   return (
-    <div className={`space-y-6 ${isFullscreen ? 'fixed inset-0 z-50 bg-[#070B14] p-6 overflow-y-auto text-white' : ''}`}>
+    <div 
+      ref={containerRef}
+      className={`space-y-6 transition-all duration-300 ${
+        isFullscreen 
+          ? 'fixed inset-0 z-[9999] bg-[#070B14] p-8 overflow-y-auto text-white w-screen h-screen' 
+          : 'w-full'
+      }`}
+    >
       {/* TV Header Bar */}
       <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-2xl">
         <div className="flex items-center gap-4">
