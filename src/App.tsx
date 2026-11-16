@@ -12,6 +12,7 @@ import { AdminWorks } from './components/AdminWorks';
 import { AdminEquipmentTypes } from './components/AdminEquipmentTypes';
 import { AdminSuppliers } from './components/AdminSuppliers';
 import { FuelManagement } from './components/FuelManagement';
+import { TvDashboard } from './components/TvDashboard';
 
 export default function App() {
   const store = FleetStore.getInstance();
@@ -263,226 +264,58 @@ export default function App() {
 
             {/* Form Board (Bento Style Card) */}
             <div className="bg-white border border-slate-200 rounded-3xl shadow-sm p-6 sm:p-8 space-y-6">
-              {/* Tabs selector */}
-              <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-150">
+              {/* TAB A: LOGIN */}
+              <form id="login_form" onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">Usuário ou Login de Acesso</label>
+                  <div className="relative">
+                    <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Ex: admin, abastecedor, joao"
+                      value={loginId}
+                      onChange={(e) => setLoginId(e.target.value)}
+                      className="w-full text-sm pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.55">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">Senha de Acesso</label>
+                  <div className="relative">
+                    <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="password"
+                      placeholder="Sua senha secreta"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full text-sm pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono"
+                      required
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400">Padrão p/ contas pré-cadastradas: <strong className="font-mono text-slate-600">123456</strong></span>
+                </div>
+
+                {authError && (
+                  <div className="bg-red-50 border border-red-150 rounded-xl p-3 text-xs text-red-650 font-medium">
+                    ⚠️ {authError}
+                  </div>
+                )}
+
+                {authSuccess && (
+                  <div className="bg-[#EEF2FF] border border-blue-100 rounded-xl p-3 text-xs text-blue-900 font-medium animate-fade-in">
+                    ✅ {authSuccess}
+                  </div>
+                )}
+
                 <button
-                  id="toggle_login_mode"
-                  onClick={() => {
-                    setAuthMode('login');
-                    setAuthError('');
-                  }}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                    authMode === 'login'
-                      ? 'bg-[#0F172A] text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
+                  type="submit"
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm transition-all active:scale-98 cursor-pointer text-sm"
                 >
                   Entrar no Painel
                 </button>
-                <button
-                  id="toggle_signup_mode"
-                  onClick={() => {
-                    setAuthMode('signup');
-                    setAuthError('');
-                  }}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
-                    authMode === 'signup'
-                      ? 'bg-[#0F172A] text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  Criar Conta Admin
-                </button>
-              </div>
-
-              {/* TAB A: LOGIN */}
-              {authMode === 'login' ? (
-                <form id="login_form" onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">Usuário ou Login de Acesso</label>
-                    <div className="relative">
-                      <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        placeholder="Ex: admin, abastecedor, joao"
-                        value={loginId}
-                        onChange={(e) => setLoginId(e.target.value)}
-                        className="w-full text-sm pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.55">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">Senha de Acesso</label>
-                    <div className="relative">
-                      <Shield className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="password"
-                        placeholder="Sua senha secreta"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full text-sm pl-10 pr-4 py-2.5 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono"
-                        required
-                      />
-                    </div>
-                    <span className="text-[10px] text-slate-400">Padrão p/ contas pré-cadastradas: <strong className="font-mono text-slate-600">123456</strong></span>
-                  </div>
-
-                  {authError && (
-                    <div className="bg-red-50 border border-red-150 rounded-xl p-3 text-xs text-red-650 font-medium">
-                      ⚠️ {authError}
-                    </div>
-                  )}
-
-                  {authSuccess && (
-                    <div className="bg-[#EEF2FF] border border-blue-100 rounded-xl p-3 text-xs text-blue-900 font-medium animate-fade-in">
-                      ✅ {authSuccess}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm transition-all active:scale-98 cursor-pointer text-sm"
-                  >
-                    Entrar no Painel
-                  </button>
-
-                  {/* Quick Test Demo Credentials */}
-                  <div className="pt-3 border-t border-slate-100">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Acesso Rápido para Testes:</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLoginId('admin');
-                          setLoginPassword('123456');
-                        }}
-                        className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold text-center transition-colors cursor-pointer"
-                      >
-                        🛡️ Admin
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLoginId('abastecedor');
-                          setLoginPassword('123456');
-                        }}
-                        className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60 rounded-lg text-[11px] font-bold text-center transition-colors cursor-pointer"
-                      >
-                        ⛽ Abastecedor
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              ) : (
-                /* TAB B: ADMIN SIGNUP */
-                <form id="signup_form" onSubmit={handleSignup} className="space-y-4">
-                  <div className="bg-blue-50/50 border border-blue-200/55 p-3 rounded-xl">
-                    <p className="text-[11px] text-blue-800 leading-relaxed font-semibold">
-                      ℹ️ <strong>Restrição de Cadastro:</strong> O cadastro de novos motoristas comuns é realizado exclusivamente por um Admin logado através do menu de motoristas. Registre-se abaixo para obter uma nova conta de <strong>Administrador do Sistema</strong>.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">Nome Completo *</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Administrador Geral"
-                      value={signupName}
-                      onChange={(e) => setSignupName(e.target.value)}
-                      className="w-full text-sm px-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-semibold"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">Usuário / Login de Acesso *</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: admin.geral"
-                      value={signupLoginId}
-                      onChange={(e) => setSignupLoginId(e.target.value)}
-                      className="w-full text-sm px-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono text-blue-900"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500">CPF *</label>
-                    <input
-                      type="text"
-                      placeholder="Identificação ex: 111.111.111-11"
-                      value={signupCpf}
-                      onChange={(e) => setSignupCpf(e.target.value)}
-                      className="w-full text-sm px-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all"
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-550">Número da CNH (Habilitação - Opcional para Admins)</label>
-                    <input
-                      type="text"
-                      placeholder="Ex: 11 dígitos numéricos (Opcional)"
-                      value={signupLicense}
-                      onChange={(e) => setSignupLicense(e.target.value)}
-                      className="w-full text-sm px-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-1.55">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-405">E-mail de Backup (Opcional)</label>
-                    <input
-                      type="email"
-                      placeholder="Ex: admin@frota.com"
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      className="w-full text-sm px-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-1.55">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-[#0F172A] font-extrabold">Senha de Acesso *</label>
-                    <div className="relative">
-                      <Shield className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="password"
-                        placeholder="Mínimo 4 caracteres obrigatório"
-                        value={signupPassword}
-                        onChange={(e) => setSignupPassword(e.target.value)}
-                        className="w-full text-sm pl-9 pr-4 py-2 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold font-mono text-slate-800"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl">
-                    <p className="text-[10px] text-amber-800 leading-relaxed font-semibold">
-                      ⚠️ <strong>Aprovação Obrigatória:</strong> Seu cadastro não será habilitado de imediato. Um administrador ativo precisará aprovar sua conta na guia "Controle de Usuários" para liberar seu acesso físico ao painel.
-                    </p>
-                  </div>
-
-                  {authError && (
-                    <div className="bg-red-50 border border-red-150 rounded-xl p-3 text-xs text-red-650 font-medium">
-                      ⚠️ {authError}
-                    </div>
-                  )}
-
-                  {authSuccess && (
-                    <div className="bg-[#EEF2FF] border border-blue-100 rounded-xl p-3 text-xs text-blue-900 font-medium animate-fade-in">
-                      ✅ {authSuccess}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="w-full py-3 bg-[#0F172A] hover:bg-slate-800 text-white font-bold rounded-xl shadow-md transition-all active:scale-98 cursor-pointer text-sm font-display tracking-wide"
-                  >
-                    Registrar Novo Administrador
-                  </button>
-                </form>
-              )}
+              </form>
             </div>
           </div>
         ) : (
@@ -579,6 +412,20 @@ export default function App() {
               <AdminSuppliers
                 currentUser={currentUser}
                 suppliers={suppliers}
+                store={store}
+              />
+            )}
+
+            {activeTab === 'tv-dashboard' && (
+              <TvDashboard
+                vehicles={vehicles}
+                equipments={equipments}
+                trips={trips}
+                equipmentUsages={equipmentUsages}
+                users={users}
+                works={works}
+                fuelInflows={fuelInflows}
+                fuelDispenses={fuelDispenses}
                 store={store}
               />
             )}

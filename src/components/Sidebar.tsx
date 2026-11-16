@@ -15,7 +15,8 @@ import {
   Settings,
   CarFront,
   LayoutDashboard,
-  Compass
+  Compass,
+  Tv
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -70,6 +71,15 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
     },
 
     // Gestão & Obras
+    {
+      id: 'tv-dashboard',
+      htmlId: 'tab_tv_dashboard_btn',
+      mobileHtmlId: 'tab_tv_dashboard_mobile_btn',
+      label: 'Painel TV (Geral)',
+      icon: Tv,
+      roleAllowed: () => true,
+      section: 'gestao',
+    },
     {
       id: 'manager-dashboard',
       htmlId: 'tab_manager_dashboard_btn',
