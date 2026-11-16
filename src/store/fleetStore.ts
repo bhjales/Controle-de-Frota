@@ -146,8 +146,6 @@ export class FleetStore {
   private previousState: Record<string, string> = {};
   private isSyncing = false;
   private syncQueued = false;
-  private activeSyncPromise: Promise<void> | null = null;
-  private vehiclesLogisticsCol: 'hasLogisticsControl' | 'haslogisticscontrol' = 'hasLogisticsControl';
 
   // Listeners list for component re-renders
   private listeners: (() => void)[] = [];
@@ -300,20 +298,7 @@ export class FleetStore {
         }
       }
 
-      if (vData !== null) {
-        if (vData.some((v: any) => 'haslogisticscontrol' in v && !('hasLogisticsControl' in v))) {
-          this.vehiclesLogisticsCol = 'haslogisticscontrol';
-        } else if (vData.some((v: any) => 'hasLogisticsControl' in v)) {
-          this.vehiclesLogisticsCol = 'hasLogisticsControl';
-        }
-        this.vehicles = vData.map((v: any) => {
-          const copy = { ...v };
-          const rawFlag = copy.hasLogisticsControl ?? copy.haslogisticscontrol;
-          copy.hasLogisticsControl = Boolean(rawFlag);
-          delete copy.haslogisticscontrol;
-          return copy as Vehicle;
-        });
-      }
+      if (vData !== null) this.vehicles = vData;
       if (eData !== null) this.equipments = eData;
 
       // Consistency check: ensure only assets in active trips/usages are marked as in_use
@@ -366,14 +351,7 @@ export class FleetStore {
           const copy = { ...item };
           if (table === 'vehicles') {
             delete copy.maintenanceHistory;
-            const flag = Boolean(copy.hasLogisticsControl);
-            if (this.vehiclesLogisticsCol === 'haslogisticscontrol') {
-              delete copy.hasLogisticsControl;
-              copy.haslogisticscontrol = flag;
-            } else {
-              delete copy.haslogisticscontrol;
-              copy.hasLogisticsControl = flag;
-            }
+            copy.hasLogisticsControl = Boolean(copy.hasLogisticsControl);
           } else if (table === 'equipments') {
             delete copy.maintenanceHistory;
           }
@@ -451,14 +429,8 @@ export class FleetStore {
 
         let added = false;
         const match = error.message.match(/Could not find the '([^']+)' column/i);
-        const missingCol = match && match[1] ? match[1] : (
-          table === 'vehicles' && error.message.includes('hasLogisticsControl') ? 'hasLogisticsControl' : null
-        );
-        if (table === 'vehicles' && missingCol === 'hasLogisticsControl' && this.vehiclesLogisticsCol === 'hasLogisticsControl') {
-          this.vehiclesLogisticsCol = 'haslogisticscontrol';
-          added = true;
-        } else if (missingCol && !columnsToExclude.includes(missingCol)) {
-          columnsToExclude.push(missingCol);
+        if (match && match[1] && !columnsToExclude.includes(match[1])) {
+          columnsToExclude.push(match[1]);
           added = true;
         } else if (table === 'users') {
           if (error.message.includes('isApproved') && !columnsToExclude.includes('isApproved')) {
@@ -545,64 +517,59 @@ export class FleetStore {
     }
   }
 
-  private async backgroundSync(): Promise<void> {
+  private async backgroundSync() {
     if (this.isSyncing) {
       this.syncQueued = true;
-      return this.activeSyncPromise || Promise.resolve();
+      return;
     }
     this.isSyncing = true;
-    const runPromise = (async () => {
-      try {
-        // Find differences using getChangedItems
-        const cUsers = this.getChangedItems('users', this.users);
-        const cWorks = this.getChangedItems('works', this.works);
-        const cEqTypes = this.getChangedItems('equipmentTypes', this.equipmentTypes);
-        const cVehCats = this.getChangedItems('vehicleCategories', this.vehicleCategories);
+    try {
+      // Find differences using getChangedItems
+      const cUsers = this.getChangedItems('users', this.users);
+      const cWorks = this.getChangedItems('works', this.works);
+      const cEqTypes = this.getChangedItems('equipmentTypes', this.equipmentTypes);
+      const cVehCats = this.getChangedItems('vehicleCategories', this.vehicleCategories);
+      
+      const cVehicles = this.getChangedItems('vehicles', this.vehicles);
+      const cEquipments = this.getChangedItems('equipments', this.equipments);
+      
+      const cTrips = this.getChangedItems('trips', this.trips);
+      const cUsages = this.getChangedItems('equipmentUsages', this.equipmentUsages);
+      const cSuppliers = this.getChangedItems('suppliers', this.suppliers);
+      const cFuelInflows = this.getChangedItems('fuelInflows', this.fuelInflows);
+      const cFuelDispenses = this.getChangedItems('fuelDispenses', this.fuelDispenses);
+      const cLogistics = this.getChangedItems('logisticsSchedules', this.logisticsSchedules);
 
-        const cVehicles = this.getChangedItems('vehicles', this.vehicles);
-        const cEquipments = this.getChangedItems('equipments', this.equipments);
+      // Sync only changed items
+      if (cUsers.length) await this.syncTable('users', cUsers);
+      if (cWorks.length) await this.syncTable('construction_works', cWorks);
+      if (cEqTypes.length) await this.syncTable('equipment_types', cEqTypes);
+      if (cVehCats.length) await this.syncTable('vehicle_categories', cVehCats);
+      if (cSuppliers.length) await this.syncTable('suppliers', cSuppliers);
+      if (cFuelInflows.length) await this.syncTable('fuel_inflows', cFuelInflows);
+      if (cFuelDispenses.length) await this.syncTable('fuel_dispenses', cFuelDispenses);
 
-        const cTrips = this.getChangedItems('trips', this.trips);
-        const cUsages = this.getChangedItems('equipmentUsages', this.equipmentUsages);
-        const cSuppliers = this.getChangedItems('suppliers', this.suppliers);
-        const cFuelInflows = this.getChangedItems('fuelInflows', this.fuelInflows);
-        const cFuelDispenses = this.getChangedItems('fuelDispenses', this.fuelDispenses);
-        const cLogistics = this.getChangedItems('logisticsSchedules', this.logisticsSchedules);
+      if (cVehicles.length) await this.syncTable('vehicles', cVehicles);
+      if (cEquipments.length) await this.syncTable('equipments', cEquipments);
 
-        // Sync only changed items
-        if (cUsers.length) await this.syncTable('users', cUsers);
-        if (cWorks.length) await this.syncTable('construction_works', cWorks);
-        if (cEqTypes.length) await this.syncTable('equipment_types', cEqTypes);
-        if (cVehCats.length) await this.syncTable('vehicle_categories', cVehCats);
-        if (cSuppliers.length) await this.syncTable('suppliers', cSuppliers);
-        if (cFuelInflows.length) await this.syncTable('fuel_inflows', cFuelInflows);
-        if (cFuelDispenses.length) await this.syncTable('fuel_dispenses', cFuelDispenses);
+      if (cTrips.length) await this.syncTable('trips', cTrips);
+      if (cUsages.length) await this.syncTable('equipment_usages', cUsages);
+      if (cLogistics.length) await this.syncTable('logistics_schedules', cLogistics);
 
-        if (cVehicles.length) await this.syncTable('vehicles', cVehicles);
-        if (cEquipments.length) await this.syncTable('equipments', cEquipments);
+      // Sync maintenance logs
+      await this.syncMaintenanceLogs();
 
-        if (cTrips.length) await this.syncTable('trips', cTrips);
-        if (cUsages.length) await this.syncTable('equipment_usages', cUsages);
-        if (cLogistics.length) await this.syncTable('logistics_schedules', cLogistics);
-
-        // Sync maintenance logs
-        await this.syncMaintenanceLogs();
-
-        // Update the previous state snapshot after sync
-        this.updatePreviousState();
-      } catch (e) {
-        console.error("Exception in backgroundSync:", e);
-      } finally {
-        this.isSyncing = false;
-        this.activeSyncPromise = null;
-        if (this.syncQueued) {
-          this.syncQueued = false;
-          await this.backgroundSync();
-        }
+      // Update the previous state snapshot after sync
+      this.updatePreviousState();
+    } catch (e) {
+      console.error("Exception in backgroundSync:", e);
+    } finally {
+      this.isSyncing = false;
+      if (this.syncQueued) {
+        this.syncQueued = false;
+        this.backgroundSync();
       }
-    })();
-    this.activeSyncPromise = runPromise;
-    return runPromise;
+    }
   }
 
   private constructor() {
@@ -900,81 +867,7 @@ export class FleetStore {
     this.saveState();
   }
 
-  private async persistVehicleLogisticsControlToSupabase(
-    vehicle: Vehicle
-  ): Promise<{ synced: boolean; isOffline?: boolean; errorMessage?: string }> {
-    const flag = Boolean(vehicle.hasLogisticsControl);
-    const colsToTry: Array<'hasLogisticsControl' | 'haslogisticscontrol'> =
-      this.vehiclesLogisticsCol === 'haslogisticscontrol'
-        ? ['haslogisticscontrol', 'hasLogisticsControl']
-        : ['hasLogisticsControl', 'haslogisticscontrol'];
-
-    let lastError = '';
-
-    for (const col of colsToTry) {
-      try {
-        // 1. Update matching by id and verify updated row count
-        const { data: byIdData, error: byIdError } = await supabase
-          .from('vehicles')
-          .update({ [col]: flag })
-          .eq('id', vehicle.id)
-          .select('id');
-
-        if (!byIdError) {
-          this.vehiclesLogisticsCol = col;
-          if (byIdData && byIdData.length > 0) {
-            return { synced: true };
-          }
-          // Fallback: match by plate in case Supabase row has different id
-          const { data: byPlateData, error: byPlateError } = await supabase
-            .from('vehicles')
-            .update({ [col]: flag })
-            .eq('plate', vehicle.plate)
-            .select('id');
-
-          if (!byPlateError && byPlateData && byPlateData.length > 0) {
-            return { synced: true };
-          }
-          // Fallback: row might not exist yet in Supabase, upsert minimal or full
-          await this.syncTable('vehicles', [vehicle]);
-          const { data: verifyData, error: verifyError } = await supabase
-            .from('vehicles')
-            .update({ [col]: flag })
-            .eq('id', vehicle.id)
-            .select('id');
-          if (!verifyError && verifyData && verifyData.length > 0) {
-            return { synced: true };
-          }
-          lastError = verifyError?.message || byPlateError?.message || 'Registro do veículo não localizado no Supabase para atualização.';
-          break;
-        }
-
-        lastError = byIdError.message;
-        if (lastError.includes('Failed to fetch')) {
-          return { synced: false, isOffline: true, errorMessage: lastError };
-        }
-
-        const isMissingCol =
-          lastError.includes('schema cache') ||
-          lastError.includes('does not exist') ||
-          lastError.includes('column');
-        if (!isMissingCol) {
-          break;
-        }
-      } catch (e: any) {
-        lastError = e?.message || String(e);
-        if (lastError.includes('Failed to fetch')) {
-          return { synced: false, isOffline: true, errorMessage: lastError };
-        }
-      }
-    }
-
-    return { synced: false, errorMessage: lastError };
-  }
-
-  public async addVehicle(
-    vehicleData: Omit<Vehicle, 'id' | 'createdAt' | 'status'>
-  ): Promise<{ success: boolean; synced?: boolean; message: string }> {
+  public addVehicle(vehicleData: Omit<Vehicle, 'id' | 'createdAt' | 'status'>): { success: boolean, message: string } {
     const plateUpper = vehicleData.plate.trim().toUpperCase();
     if (this.vehicles.some(v => v.plate.toUpperCase() === plateUpper)) {
       return { success: false, message: `Já existe um carro registrado com a placa ${plateUpper}.` };
@@ -990,52 +883,26 @@ export class FleetStore {
     };
 
     this.vehicles.unshift(newVehicle); // Newest first
-    this.persistLocalState();
-    this.triggerListeners();
-    await this.backgroundSync();
-
-    const syncRes = await this.persistVehicleLogisticsControlToSupabase(newVehicle);
-    if (!syncRes.synced && !syncRes.isOffline) {
-      return {
-        success: true,
-        synced: false,
-        message: `Veículo cadastrado, mas a coluna "hasLogisticsControl" não foi atualizada no Supabase (${syncRes.errorMessage}). Execute o script SQL de atualização no Supabase.`
-      };
-    }
-
-    return { success: true, synced: syncRes.synced, message: 'Veículo cadastrado com sucesso!' };
+    this.saveState();
+    return { success: true, message: 'Veículo cadastrado adaptado com sucesso!' };
   }
 
-  public async updateVehicle(
-    updatedVehicle: Vehicle
-  ): Promise<{ success: boolean; synced: boolean; message: string }> {
+  public updateVehicle(updatedVehicle: Vehicle) {
     const normalized: Vehicle = {
       ...updatedVehicle,
       hasLogisticsControl: Boolean(updatedVehicle.hasLogisticsControl)
     };
     this.vehicles = this.vehicles.map(v => v.id === normalized.id ? normalized : v);
-    this.persistLocalState();
-    this.triggerListeners();
-    await this.backgroundSync();
-
-    const syncRes = await this.persistVehicleLogisticsControlToSupabase(normalized);
-    if (!syncRes.synced) {
-      if (syncRes.isOffline) {
-        return {
-          success: true,
-          synced: false,
-          message: 'Alteração salva localmente. Sem conexão com o Supabase no momento.'
-        };
-      }
-      return {
-        success: false,
-        synced: false,
-        message: `Não foi possível atualizar "hasLogisticsControl" no Supabase: ${syncRes.errorMessage}. Verifique se executou o ALTER TABLE "hasLogisticsControl" e NOTIFY pgrst, 'reload schema'; no SQL Editor.`
-      };
-    }
-
-    this.updatePreviousState();
-    return { success: true, synced: true, message: 'Veículo atualizado no Supabase com sucesso!' };
+    this.saveState();
+    supabase
+      .from('vehicles')
+      .update({ hasLogisticsControl: normalized.hasLogisticsControl })
+      .eq('id', normalized.id)
+      .then(({ error }) => {
+        if (error) {
+          console.warn('Supabase update hasLogisticsControl failed:', error.message);
+        }
+      });
   }
 
   public toggleVehicleStatus(vehicleId: string, newStatus: 'available' | 'maintenance' | 'inactive') {
@@ -2254,55 +2121,31 @@ export class FleetStore {
   // CONTROLE DE LOGÍSTICA (PROGRAMAÇÃO DE VIAGENS, PERMANÊNCIAS E LOCAÇÃO)
   // ============================================================================
 
-  public async toggleVehicleLogisticsControl(
-    vehicleId: string,
-    enabled: boolean
-  ): Promise<{ success: boolean; synced: boolean; message: string }> {
+  public toggleVehicleLogisticsControl(vehicleId: string, enabled: boolean): { success: boolean; message: string } {
     const vehicle = this.vehicles.find(v => v.id === vehicleId);
-    if (!vehicle) return { success: false, synced: false, message: 'Veículo não encontrado.' };
+    if (!vehicle) return { success: false, message: 'Veículo não encontrado.' };
 
-    const previousFlag = Boolean(vehicle.hasLogisticsControl);
     const flag = Boolean(enabled);
-    const updatedVehicle: Vehicle = { ...vehicle, hasLogisticsControl: flag };
-
     this.vehicles = this.vehicles.map(v =>
-      v.id === vehicleId ? updatedVehicle : v
+      v.id === vehicleId ? { ...v, hasLogisticsControl: flag } : v
     );
-    this.persistLocalState();
-    this.triggerListeners();
-
-    await this.backgroundSync();
-    const syncRes = await this.persistVehicleLogisticsControlToSupabase(updatedVehicle);
-
-    if (!syncRes.synced) {
-      if (syncRes.isOffline) {
-        return {
-          success: true,
-          synced: false,
-          message: 'Sem conexão com o Supabase no momento para gravar o Controle de Logística.'
-        };
-      }
-      // Revert optimistic state so UI reflects actual Supabase state
-      this.vehicles = this.vehicles.map(v =>
-        v.id === vehicleId ? { ...v, hasLogisticsControl: previousFlag } : v
-      );
-      this.persistLocalState();
-      this.updatePreviousState();
-      this.triggerListeners();
-      return {
-        success: false,
-        synced: false,
-        message: `Falha ao atualizar Controle de Logística no Supabase (${vehicle.plate}): ${syncRes.errorMessage}. Execute o SQL da coluna "hasLogisticsControl" e "NOTIFY pgrst, 'reload schema';" no SQL Editor do Supabase.`
-      };
-    }
-
-    this.updatePreviousState();
+    this.saveState();
+    supabase
+      .from('vehicles')
+      .update({ hasLogisticsControl: flag })
+      .eq('id', vehicleId)
+      .then(({ error }) => {
+        if (error) {
+          console.warn(
+            `[Supabase] Falha ao atualizar hasLogisticsControl do veículo ${vehicle.plate}: ${error.message}. Execute NOTIFY pgrst, 'reload schema'; no SQL Editor do Supabase.`
+          );
+        }
+      });
     return {
       success: true,
-      synced: true,
       message: flag
-        ? `Controle de Logística ativado no Supabase para ${vehicle.plate}.`
-        : `Controle de Logística desativado no Supabase para ${vehicle.plate}.`
+        ? `Controle de Logística ativado para ${vehicle.plate}.`
+        : `Controle de Logística desativado para ${vehicle.plate}.`
     };
   }
 

@@ -153,8 +153,6 @@ export function LogisticsControl({
   const [formError, setFormError] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [togglingVehicleId, setTogglingVehicleId] = useState<string | null>(null);
-  const [vehicleToggleError, setVehicleToggleError] = useState('');
 
   const suggestedCities = useMemo(
     () =>
@@ -579,22 +577,6 @@ export function LogisticsControl({
     [users]
   );
 
-  const handleToggleVehicleLogistics = async (vehicleId: string, enabled: boolean) => {
-    setVehicleToggleError('');
-    setFeedbackMsg('');
-    setTogglingVehicleId(vehicleId);
-    try {
-      const res = await store.toggleVehicleLogisticsControl(vehicleId, enabled);
-      if (res.success && res.synced) {
-        setFeedbackMsg(res.message);
-      } else {
-        setVehicleToggleError(res.message);
-      }
-    } finally {
-      setTogglingVehicleId(null);
-    }
-  };
-
   return (
     <div id="logistics_control_view" className="space-y-6">
       {/* Header Section */}
@@ -644,21 +626,6 @@ export function LogisticsControl({
           <span>{feedbackMsg}</span>
         </div>
       )}
-      {vehicleToggleError && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-900 px-4 py-3 rounded-xl text-xs font-semibold flex items-start justify-between gap-2">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <span>{vehicleToggleError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setVehicleToggleError('')}
-            className="text-rose-700 hover:text-rose-900 font-bold cursor-pointer shrink-0"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* Quick Vehicle Logistics Toggle Panel (Admin / Gerencial) */}
       {showEnableVehicles && canManage && (
@@ -683,14 +650,12 @@ export function LogisticsControl({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {vehicles.filter(v => v.status !== 'inactive').map(v => {
               const enabled = Boolean(v.hasLogisticsControl);
-              const isBusy = togglingVehicleId === v.id;
               return (
                 <button
                   key={v.id}
                   type="button"
-                  disabled={isBusy}
-                  onClick={() => handleToggleVehicleLogistics(v.id, !enabled)}
-                  className={`p-3 rounded-xl border text-left flex items-center justify-between gap-2 transition-colors cursor-pointer disabled:opacity-60 ${
+                  onClick={() => store.toggleVehicleLogisticsControl(v.id, !enabled)}
+                  className={`p-3 rounded-xl border text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                     enabled
                       ? 'bg-blue-50/60 border-blue-300 text-slate-900'
                       : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-white'
@@ -705,7 +670,7 @@ export function LogisticsControl({
                       ? 'bg-blue-600 text-white border-blue-600'
                       : 'bg-white text-slate-500 border-slate-200'
                   }`}>
-                    {isBusy ? 'Salvando...' : enabled ? 'Ativo' : 'Ativar'}
+                    {enabled ? 'Ativo' : 'Ativar'}
                   </span>
                 </button>
               );
