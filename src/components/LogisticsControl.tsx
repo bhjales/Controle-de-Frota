@@ -68,6 +68,15 @@ function getDaysDiff(start: string, end: string): number {
   return Math.max(1, diff);
 }
 
+function addDaysISO(isoDate: string, days: number): string {
+  if (!isoDate) return '';
+  const parts = isoDate.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return isoDate;
+  const dt = new Date(parts[0], parts[1] - 1, parts[2]);
+  dt.setDate(dt.getDate() + days);
+  return formatDateISO(dt);
+}
+
 const ALLOCATION_LABELS: Record<LogisticsAllocationType, string> = {
   uso_programado: 'Uso Programado',
   viagem: 'Uso Programado',
@@ -138,6 +147,7 @@ export function LogisticsControl({
   const [formCargoDescription, setFormCargoDescription] = useState('');
   const [formStartDate, setFormStartDate] = useState(todayStr);
   const [formEndDate, setFormEndDate] = useState(todayStr);
+  const [formIsRoundTrip, setFormIsRoundTrip] = useState(false);
   const [formDriverId, setFormDriverId] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formError, setFormError] = useState('');
@@ -274,6 +284,7 @@ export function LogisticsControl({
     setFormCargoDescription('');
     setFormStartDate(prefillDate || todayStr);
     setFormEndDate(prefillDate || todayStr);
+    setFormIsRoundTrip(false);
     setFormDriverId('');
     setFormNotes('');
     setFormError('');
@@ -303,6 +314,7 @@ export function LogisticsControl({
     setFormCargoDescription(schedule.cargoDescription || '');
     setFormStartDate(schedule.startDate);
     setFormEndDate(schedule.endDate);
+    setFormIsRoundTrip(false);
     setFormDriverId(schedule.driverId || '');
     setFormNotes(schedule.notes || '');
     setFormError('');
@@ -412,6 +424,32 @@ export function LogisticsControl({
       return;
     }
 
+    const durationDays = getDaysDiff(formStartDate, formEndDate);
+    const returnStartDate = addDaysISO(formEndDate, 1);
+    const returnEndDate = addDaysISO(returnStartDate, durationDays - 1);
+
+    const buildReturnPayload = () => ({
+      vehicleId: formVehicleId,
+      allocationType: 'uso_programado' as LogisticsAllocationType,
+      scheduleStatus: formScheduleStatus,
+      isThirdPartyRental: Boolean(formIsThirdParty),
+      thirdPartyName: formIsThirdParty ? formThirdPartyName.trim() || undefined : undefined,
+      // Inverted: Destino da ida -> Origem da volta | Origem da ida -> Destino da volta
+      originWorkId: formDestMode === 'obra' ? formWorkId || undefined : undefined,
+      originLabel: formDestLabel.trim(),
+      originCity: formDestCity.trim(),
+      originState: formDestState.trim().toUpperCase(),
+      workId: formOriginMode === 'obra' ? formOriginWorkId || undefined : undefined,
+      destinationLabel: formOriginLabel.trim(),
+      destinationCity: formOriginCity.trim(),
+      destinationState: formOriginState.trim().toUpperCase(),
+      cargoDescription: formCargoDescription.trim(),
+      startDate: returnStartDate,
+      endDate: returnEndDate,
+      driverId: formDriverId || undefined,
+      notes: formNotes.trim() ? `${formNotes.trim()} (Retorno - Ida e Volta)` : 'Retorno (Ida e Volta)'
+    });
+
     if (editingSchedule) {
       const matchedOriginWork = formOriginMode === 'obra' && formOriginWorkId ? works.find(w => w.id === formOriginWorkId) : undefined;
       const matchedDestWork = formDestMode === 'obra' && formWorkId ? works.find(w => w.id === formWorkId) : undefined;
@@ -442,9 +480,16 @@ export function LogisticsControl({
         notes: formNotes.trim() || undefined
       });
       if (res.success) {
+        let msg = res.message;
+        if (formIsRoundTrip) {
+          const retRes = store.addLogisticsSchedule(buildReturnPayload());
+          if (retRes.success) {
+            msg = `Programação atualizada e viagem de volta gerada (${formatDateBR(returnStartDate)} a ${formatDateBR(returnEndDate)})!`;
+          }
+        }
         setShowModal(false);
-        setFeedbackMsg(res.message);
-        setTimeout(() => setFeedbackMsg(''), 3500);
+        setFeedbackMsg(msg);
+        setTimeout(() => setFeedbackMsg(''), 4500);
       } else {
         setFormError(res.message);
       }
@@ -470,9 +515,16 @@ export function LogisticsControl({
         notes: formNotes.trim() || undefined
       });
       if (res.success) {
+        let msg = res.message;
+        if (formIsRoundTrip) {
+          const retRes = store.addLogisticsSchedule(buildReturnPayload());
+          if (retRes.success) {
+            msg = `Programação de Ida (${formatDateBR(formStartDate)}–${formatDateBR(formEndDate)}) e Volta (${formatDateBR(returnStartDate)}–${formatDateBR(returnEndDate)}) registradas com sucesso!`;
+          }
+        }
         setShowModal(false);
-        setFeedbackMsg(res.message);
-        setTimeout(() => setFeedbackMsg(''), 3500);
+        setFeedbackMsg(msg);
+        setTimeout(() => setFeedbackMsg(''), 4500);
       } else {
         setFormError(res.message);
       }
@@ -1348,31 +1400,88 @@ export function LogisticsControl({
                 </div>
               </div>
 
-              {/* Dates: Data Inicial e Data Final */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700">Data Inicial *</label>
-                  <input
-                    type="date"
-                    value={formStartDate}
-                    onChange={(e) => {
-                      setFormStartDate(e.target.value);
-                      if (formEndDate < e.target.value) setFormEndDate(e.target.value);
-                    }}
-                    className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500 font-mono"
-                    required
-                  />
+              {/* Dates: Data Inicial e Data Final + Pergunta Ida e Volta */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">Data Inicial (Ida) *</label>
+                    <input
+                      type="date"
+                      value={formStartDate}
+                      onChange={(e) => {
+                        setFormStartDate(e.target.value);
+                        if (formEndDate < e.target.value) setFormEndDate(e.target.value);
+                      }}
+                      className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500 font-mono"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-700">Data Final (Ida) *</label>
+                    <input
+                      type="date"
+                      value={formEndDate}
+                      min={formStartDate}
+                      onChange={(e) => setFormEndDate(e.target.value)}
+                      className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500 font-mono"
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700">Data Final *</label>
-                  <input
-                    type="date"
-                    value={formEndDate}
-                    min={formStartDate}
-                    onChange={(e) => setFormEndDate(e.target.value)}
-                    className="w-full px-3 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-blue-500 font-mono"
-                    required
-                  />
+
+                <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-900">
+                        {editingSchedule ? 'Gerar viagem de volta (Ida e Volta)?' : 'Ida e Volta? *'}
+                      </label>
+                      <p className="text-[11px] text-slate-600">
+                        Duplica a programação invertendo origem e destino, iniciando no dia seguinte ao término da ida com a mesma duração.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 p-1 bg-white border border-amber-200 rounded-lg self-start shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setFormIsRoundTrip(false)}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md cursor-pointer ${
+                          !formIsRoundTrip ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {editingSchedule ? 'Não' : 'Somente Ida'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormIsRoundTrip(true)}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md cursor-pointer ${
+                          formIsRoundTrip ? 'bg-amber-600 text-white' : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        {editingSchedule ? 'Sim, gerar volta' : 'Ida e Volta'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {formIsRoundTrip && formStartDate && formEndDate && (() => {
+                    const dur = getDaysDiff(formStartDate, formEndDate);
+                    const retStart = addDaysISO(formEndDate, 1);
+                    const retEnd = addDaysISO(retStart, dur - 1);
+                    const origText = formOriginLabel
+                      ? `${formOriginLabel}${formOriginCity ? ` (${formOriginCity}/${formOriginState})` : ''}`
+                      : 'Origem';
+                    const destText = formDestLabel
+                      ? `${formDestLabel}${formDestCity ? ` (${formDestCity}/${formDestState})` : ''}`
+                      : 'Destino';
+                    return (
+                      <div className="bg-white border border-amber-200 rounded-lg px-3 py-2 text-[11px] text-slate-700 space-y-0.5 tabular-nums">
+                        <div className="font-bold text-amber-900">
+                          Retorno automático programado: {formatDateBR(retStart)} a {formatDateBR(retEnd)} ({dur} {dur === 1 ? 'dia' : 'dias'})
+                        </div>
+                        <div className="text-slate-600">
+                          Trecho de volta: <span className="font-semibold text-slate-900">{destText}</span> → <span className="font-semibold text-slate-900">{origText}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
