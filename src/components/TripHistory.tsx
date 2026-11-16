@@ -12,6 +12,7 @@ interface TripHistoryProps {
 export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
   const [search, setSearch] = useState('');
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
+  const [showMap, setShowMap] = useState(true);
 
   const handleDeleteTrip = (tripId: string) => {
     const isConfirmed = window.confirm('Deseja excluir este registro de viagem? O veículo associado retornará ao pátio.');
@@ -107,6 +108,113 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
         </div>
       </div>
 
+      {/* 🗺️ Interactive Route Map based on Work and Trip Cities */}
+      <div className="bg-gradient-to-br from-[#0F172A] to-[#1E293B] border border-slate-800 rounded-3xl p-6 text-white shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-blue-600/20 border border-blue-500/30 rounded-2xl text-blue-400">
+              <Compass className="w-6 h-6 animate-spin" style={{ animationDuration: '20s' }} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 font-display">
+                Mapa de Rotas e Itinerários por Cidades (Obras)
+              </h3>
+              <p className="text-xs text-slate-400">Visualização geográfica e conexões de rotas entre a Base e os canteiros de obras.</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+              {store.works.length} Cidades de Obras Integradas
+            </span>
+            <button
+              onClick={() => setShowMap(!showMap)}
+              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white transition-all border border-slate-700 cursor-pointer"
+            >
+              {showMap ? 'Ocultar Mapa' : 'Exibir Mapa'}
+            </button>
+          </div>
+        </div>
+
+        {showMap && (
+          <div className="space-y-4">
+            {/* Visual SVG Map Simulation */}
+            <div className="relative bg-slate-950/80 border border-slate-800 rounded-2xl p-6 overflow-hidden min-h-[260px] flex flex-col items-center justify-center">
+              {/* Grid Background */}
+              <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-25 pointer-events-none"></div>
+
+              <div className="relative z-10 w-full max-w-3xl flex flex-col md:flex-row items-center justify-around gap-8 py-4">
+                {/* Headquarters Node */}
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-600/30 border-2 border-blue-500 flex items-center justify-center text-blue-400 shadow-lg shadow-blue-500/25 animate-bounce" style={{ animationDuration: '4s' }}>
+                    <Navigation className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold font-mono text-white block">Base / Sede Central</span>
+                    <span className="text-[10px] text-slate-400">Ponto de Partida da Frota</span>
+                  </div>
+                </div>
+
+                {/* Connecting Path Lines */}
+                <div className="hidden md:flex flex-1 items-center px-4 relative">
+                  <div className="w-full h-0.5 bg-gradient-to-r from-blue-500 via-emerald-500 to-amber-500 relative">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2.5 py-0.5 bg-slate-900 border border-slate-700 rounded-full text-[10px] font-mono font-bold text-amber-400 shadow">
+                      {filteredTrips.length} Rotas Registradas
+                    </div>
+                  </div>
+                </div>
+
+                {/* Destination Cities Nodes */}
+                <div className="flex flex-col gap-2.5 w-full md:w-auto max-h-48 overflow-y-auto pr-2">
+                  {store.works.length === 0 ? (
+                    <div className="text-xs text-slate-400 text-center p-3 bg-slate-900 rounded-xl border border-slate-800">
+                      Nenhuma obra/cidade cadastrada.
+                    </div>
+                  ) : (
+                    store.works.map((work) => {
+                      const tripsToWork = filteredTrips.filter(t => t.workId === work.id || t.checkIn.destination.toLowerCase().includes(work.city.toLowerCase()));
+                      return (
+                        <div key={work.id} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-4 min-w-[220px]">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                              <MapPin className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-white block">{work.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">📍 {work.city} - {work.state}</span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            {tripsToWork.length} viagens
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Route List / Highlights */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 text-xs space-y-1 font-mono">
+                <span className="text-slate-400 text-[10px] uppercase font-bold block">Total de Destinos Atendidos</span>
+                <span className="text-lg font-black text-white">{store.works.length} Cidades / Obras</span>
+              </div>
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 text-xs space-y-1 font-mono">
+                <span className="text-slate-400 text-[10px] uppercase font-bold block">Quilometragem Mapeada</span>
+                <span className="text-lg font-black text-emerald-400">{totalKmDriven.toLocaleString()} km rodados</span>
+              </div>
+              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 text-xs space-y-1 font-mono">
+                <span className="text-slate-400 text-[10px] uppercase font-bold block">Status do Sistema de Rotas</span>
+                <span className="text-lg font-black text-blue-400">🟢 Sincronizado</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Main Panel */}
       <div className="space-y-4">
         {/* Banner with filters */}
@@ -191,8 +299,23 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                     )}
                   </div>
 
+                  {/* Route badge showing origin -> destination city */}
+                  <div className="mt-4 mx-2 bg-slate-50 border border-slate-200 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 bg-blue-100 text-blue-600 rounded-lg">
+                        <MapPin className="w-3.5 h-3.5" />
+                      </span>
+                      <span>Rota: <strong className="text-slate-900">Base Central (Sede)</strong> ➔ <strong className="text-blue-600">{trip.checkIn.destination}</strong></span>
+                    </div>
+                    {trip.workName && (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200">
+                        Obra: {trip.workName}
+                      </span>
+                    )}
+                  </div>
+
                   {/* Body Layout: CHECK-IN on Left, CHECK-OUT on Right (if completed) */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-5 pl-2">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 pl-2">
                     
                     {/* Check In Column */}
                     <div className="space-y-3.5">
