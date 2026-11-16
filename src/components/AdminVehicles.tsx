@@ -29,6 +29,9 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [status, setStatus] = useState<'available' | 'maintenance' | 'inactive'>('available');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+  const [isSavingVehicle, setIsSavingVehicle] = useState(false);
+  const [togglingLogisticsId, setTogglingLogisticsId] = useState<string | null>(null);
+  const [logisticsFeedback, setLogisticsFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleStartEdit = (vehicle: Vehicle) => {
     setEditingVehicle(vehicle);
@@ -66,7 +69,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setFormSuccess('');
   };
 
-  const handleRegisterVehicles = (e: React.FormEvent) => {
+  const handleRegisterVehicles = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
@@ -94,75 +97,98 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     }
 
     const matchedWork = selectedWorkId ? works.find(w => w.id === selectedWorkId) : undefined;
+    setIsSavingVehicle(true);
 
-    if (editingVehicle) {
-      if (status === 'inactive' && editingVehicle.status === 'in_use') {
-        setFormError('Não é possível inativar um veículo enquanto ele estiver em viagem ativa. Finalize a viagem antes de inativá-lo.');
-        return;
-      }
+    try {
+      if (editingVehicle) {
+        if (status === 'inactive' && editingVehicle.status === 'in_use') {
+          setFormError('Não é possível inativar um veículo enquanto ele estiver em viagem ativa. Finalize a viagem antes de inativá-lo.');
+          return;
+        }
 
-      const finalStatus = editingVehicle.status === 'in_use' ? 'in_use' : status;
-      const parsedTank = tankCapacity.trim() !== '' ? Number(tankCapacity) : undefined;
-      const updatedVehicle: Vehicle = {
-        ...editingVehicle,
-        brand: brand.trim(),
-        model: model.trim(),
-        plate: plate.trim().toUpperCase(),
-        year: Number(year),
-        color: color.trim(),
-        currentKm: Number(initialKm),
-        workId: matchedWork?.id,
-        workName: matchedWork?.name,
-        category: category,
-        tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
-        hasLogisticsControl,
-        status: finalStatus,
-        isActive: finalStatus !== 'inactive'
-      };
-      
-      store.updateVehicle(updatedVehicle);
-      setFormSuccess(finalStatus === 'inactive' ? 'Veículo inativado e atualizado com sucesso!' : 'Veículo atualizado com sucesso!');
-      setTimeout(() => {
-        handleCancelForm();
-      }, 1500);
-    } else {
-      const parsedTank = tankCapacity.trim() !== '' ? Number(tankCapacity) : undefined;
-      const result = store.addVehicle({
-        brand: brand.trim(),
-        model: model.trim(),
-        plate: plate.trim().toUpperCase(),
-        year: Number(year),
-        color: color.trim(),
-        currentKm: Number(initialKm),
-        workId: matchedWork?.id,
-        workName: matchedWork?.name,
-        category: category,
-        tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
-        hasLogisticsControl
-      });
+        const finalStatus = editingVehicle.status === 'in_use' ? 'in_use' : status;
+        const parsedTank = tankCapacity.trim() !== '' ? Number(tankCapacity) : undefined;
+        const updatedVehicle: Vehicle = {
+          ...editingVehicle,
+          brand: brand.trim(),
+          model: model.trim(),
+          plate: plate.trim().toUpperCase(),
+          year: Number(year),
+          color: color.trim(),
+          currentKm: Number(initialKm),
+          workId: matchedWork?.id,
+          workName: matchedWork?.name,
+          category: category,
+          tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
+          hasLogisticsControl,
+          status: finalStatus,
+          isActive: finalStatus !== 'inactive'
+        };
 
-      if (result.success) {
-        setFormSuccess(result.message);
-        // reset form
-        setBrand('');
-        setModel('');
-        setPlate('');
-        setYear(new Date().getFullYear());
-        setColor('');
-        setInitialKm(0);
-        setCategory(store.vehicleCategories[0]?.name || '');
-        setSelectedWorkId('');
-        setTankCapacity('');
-        setHasLogisticsControl(false);
-        
-        // Auto close form after briefly showing success
+        const res = await store.updateVehicle(updatedVehicle);
+        if (!res.success || !res.synced) {
+          setFormError(res.message);
+          return;
+        }
+        setFormSuccess(finalStatus === 'inactive' ? 'Veículo inativado e atualizado no Supabase!' : res.message);
         setTimeout(() => {
-          setShowForm(false);
-          setFormSuccess('');
-        }, 1500);
+          handleCancelForm();
+        }, 1200);
       } else {
-        setFormError(result.message);
+        const parsedTank = tankCapacity.trim() !== '' ? Number(tankCapacity) : undefined;
+        const result = await store.addVehicle({
+          brand: brand.trim(),
+          model: model.trim(),
+          plate: plate.trim().toUpperCase(),
+          year: Number(year),
+          color: color.trim(),
+          currentKm: Number(initialKm),
+          workId: matchedWork?.id,
+          workName: matchedWork?.name,
+          category: category,
+          tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
+          hasLogisticsControl
+        });
+
+        if (result.success && result.synced !== false) {
+          setFormSuccess(result.message);
+          // reset form
+          setBrand('');
+          setModel('');
+          setPlate('');
+          setYear(new Date().getFullYear());
+          setColor('');
+          setInitialKm(0);
+          setCategory(store.vehicleCategories[0]?.name || '');
+          setSelectedWorkId('');
+          setTankCapacity('');
+          setHasLogisticsControl(false);
+
+          // Auto close form after briefly showing success
+          setTimeout(() => {
+            setShowForm(false);
+            setFormSuccess('');
+          }, 1200);
+        } else {
+          setFormError(result.message);
+        }
       }
+    } finally {
+      setIsSavingVehicle(false);
+    }
+  };
+
+  const handleToggleLogisticsControl = async (vehicleId: string, enabled: boolean) => {
+    setLogisticsFeedback(null);
+    setTogglingLogisticsId(vehicleId);
+    try {
+      const res = await store.toggleVehicleLogisticsControl(vehicleId, enabled);
+      setLogisticsFeedback({
+        type: res.success && res.synced ? 'success' : 'error',
+        text: res.message
+      });
+    } finally {
+      setTogglingLogisticsId(null);
     }
   };
 
@@ -585,9 +611,10 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
             </button>
             <button
               type="submit"
-              className="px-5 py-2 text-sm bg-slate-905 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all cursor-pointer"
+              disabled={isSavingVehicle}
+              className="px-5 py-2 text-sm bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all cursor-pointer"
             >
-              {editingVehicle ? 'Salvar Alterações' : 'Confirmar Cadastro'}
+              {isSavingVehicle ? 'Salvando no Supabase...' : editingVehicle ? 'Salvar Alterações' : 'Confirmar Cadastro'}
             </button>
           </div>
         </form>
@@ -631,6 +658,25 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
           </div>
         </div>
       </div>
+
+      {logisticsFeedback && (
+        <div
+          className={`rounded-2xl p-4 border text-xs font-semibold flex items-start justify-between gap-3 ${
+            logisticsFeedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          <span>{logisticsFeedback.text}</span>
+          <button
+            type="button"
+            onClick={() => setLogisticsFeedback(null)}
+            className="text-current opacity-70 hover:opacity-100 font-bold cursor-pointer shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Vehicles Cards Grid */}
       {filteredVehicles.length === 0 ? (
@@ -710,15 +756,20 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                       <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Logística</span>
                       <button
                         type="button"
-                        onClick={() => store.toggleVehicleLogisticsControl(vehicle.id, !vehicle.hasLogisticsControl)}
+                        disabled={togglingLogisticsId === vehicle.id}
+                        onClick={() => handleToggleLogisticsControl(vehicle.id, !vehicle.hasLogisticsControl)}
                         title="Clique para ativar ou desativar o Controle de Logística"
-                        className={`text-left font-bold cursor-pointer transition-colors ${
+                        className={`text-left font-bold cursor-pointer transition-colors disabled:opacity-50 ${
                           vehicle.hasLogisticsControl
                             ? 'text-blue-700 hover:text-blue-900'
                             : 'text-slate-400 hover:text-slate-700'
                         }`}
                       >
-                        {vehicle.hasLogisticsControl ? 'Ativo' : 'Não possui'}
+                        {togglingLogisticsId === vehicle.id
+                          ? 'Salvando...'
+                          : vehicle.hasLogisticsControl
+                          ? 'Ativo'
+                          : 'Não possui'}
                       </button>
                     </div>
                   </div>
