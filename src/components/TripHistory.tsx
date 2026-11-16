@@ -459,29 +459,108 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
   );
 }
 
-function getCityCoordinates(cityName: string): [number, number] {
-  const name = (cityName || '').toLowerCase();
-  if (name.includes('são paulo') || name.includes('sao paulo')) return [-23.5505, -46.6333];
-  if (name.includes('campinas')) return [-22.9056, -47.0608];
-  if (name.includes('rio de janeiro')) return [-22.9068, -43.1729];
-  if (name.includes('brasília') || name.includes('brasilia')) return [-15.7801, -47.9292];
-  if (name.includes('curitiba')) return [-25.4284, -49.2733];
-  if (name.includes('belo horizonte')) return [-19.9167, -43.9345];
-  if (name.includes('porto alegre')) return [-30.0346, -51.2177];
-  if (name.includes('salvador')) return [-12.9714, -38.5014];
-  if (name.includes('recife')) return [-8.0476, -34.8770];
-  if (name.includes('fortaleza')) return [-3.7172, -38.5433];
-  if (name.includes('santos')) return [-23.9608, -46.3336];
-  if (name.includes('sorocaba')) return [-23.5016, -47.4588];
-  if (name.includes('ribeirão preto') || name.includes('ribeirao preto')) return [-21.1775, -47.8103];
-  if (name.includes('são josé dos campos') || name.includes('sao jose dos campos')) return [-23.2237, -45.9009];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+const cityCoordsCache: Record<string, [number, number]> = {
+  'são paulo': [-23.5505, -46.6333],
+  'sao paulo': [-23.5505, -46.6333],
+  'campinas': [-22.9056, -47.0608],
+  'rio de janeiro': [-22.9068, -43.1729],
+  'brasília': [-15.7801, -47.9292],
+  'brasilia': [-15.7801, -47.9292],
+  'curitiba': [-25.4284, -49.2733],
+  'belo horizonte': [-19.9167, -43.9345],
+  'porto alegre': [-30.0346, -51.2177],
+  'salvador': [-12.9714, -38.5014],
+  'recife': [-8.0476, -34.8770],
+  'fortaleza': [-3.7172, -38.5433],
+  'santos': [-23.9608, -46.3336],
+  'sorocaba': [-23.5016, -47.4588],
+  'ribeirão preto': [-21.1775, -47.8103],
+  'ribeirao preto': [-21.1775, -47.8103],
+  'são josé dos campos': [-23.2237, -45.9009],
+  'sao jose dos campos': [-23.2237, -45.9009],
+  'florianópolis': [-27.5954, -48.5480],
+  'florianopolis': [-27.5954, -48.5480],
+  'vitória': [-20.3155, -40.3128],
+  'vitoria': [-20.3155, -40.3128],
+  'goiânia': [-16.6864, -49.2643],
+  'goiania': [-16.6864, -49.2643],
+  'cuiabá': [-15.6014, -56.0979],
+  'cuiaba': [-15.6014, -56.0979],
+  'campo grande': [-20.4697, -54.6201],
+  'manaus': [-3.1190, -60.0217],
+  'belém': [-1.4558, -48.4902],
+  'belem': [-1.4558, -48.4902],
+  'são luís': [-2.5387, -44.2829],
+  'sao luis': [-2.5387, -44.2829],
+  'teresina': [-5.0919, -42.8034],
+  'natal': [-5.7945, -35.2110],
+  'joão pessoa': [-7.1195, -34.8450],
+  'joao pessoa': [-7.1195, -34.8450],
+  'maceió': [-9.6658, -35.7353],
+  'maceio': [-9.6658, -35.7353],
+  'aracaju': [-10.9472, -37.0731],
+  'palmas': [-10.184, -48.3336],
+};
+
+const stateCenters: Record<string, [number, number]> = {
+  'sp': [-23.5505, -46.6333],
+  'rj': [-22.9068, -43.1729],
+  'mg': [-19.9167, -43.9345],
+  'rs': [-30.0346, -51.2177],
+  'pr': [-25.4284, -49.2733],
+  'sc': [-27.5954, -48.5480],
+  'ba': [-12.9714, -38.5014],
+  'pe': [-8.0476, -34.8770],
+  'ce': [-3.7172, -38.5433],
+  'df': [-15.7801, -47.9292],
+  'go': [-16.6864, -49.2643],
+  'es': [-20.3155, -40.3128],
+  'mt': [-15.6014, -56.0979],
+  'ms': [-20.4697, -54.6201],
+  'am': [-3.1190, -60.0217],
+  'pa': [-1.4558, -48.4902],
+  'ma': [-2.5387, -44.2829],
+  'pi': [-5.0919, -42.8034],
+  'rn': [-5.7945, -35.2110],
+  'pb': [-7.1195, -34.8450],
+  'al': [-9.6658, -35.7353],
+  'se': [-10.9472, -37.0731],
+  'to': [-10.184, -48.3336],
+  'ro': [-8.7619, -63.9039],
+  'ac': [-9.9749, -67.8243],
+  'ap': [0.0389, -51.0664],
+  'rr': [2.8195, -60.6733],
+};
+
+async function resolveCityCoordinates(city: string, state: string): Promise<[number, number]> {
+  const cleanCity = (city || '').trim().toLowerCase();
+  const cleanState = (state || '').trim().toLowerCase();
+  
+  if (cityCoordsCache[cleanCity]) {
+    return cityCoordsCache[cleanCity];
   }
-  const latOffset = (hash % 50) / 10;
-  const lngOffset = ((hash >> 3) % 50) / 10;
-  return [-23.5505 + latOffset, -46.6333 + lngOffset];
+
+  try {
+    const query = `${city}, ${state}, Brazil`;
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
+      headers: { 'Accept-Language': 'pt-BR' }
+    });
+    const data = await res.json();
+    if (data && data.length > 0) {
+      const lat = parseFloat(data[0].lat);
+      const lon = parseFloat(data[0].lon);
+      cityCoordsCache[cleanCity] = [lat, lon];
+      return [lat, lon];
+    }
+  } catch (err) {
+    console.warn('Geocoding fetch failed for:', city, state, err);
+  }
+
+  if (stateCenters[cleanState]) {
+    return stateCenters[cleanState];
+  }
+
+  return [-23.5505, -46.6333];
 }
 
 function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
@@ -515,35 +594,44 @@ function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
     });
 
     const hqCoord: [number, number] = [-23.5505, -46.6333];
-
     L.marker(hqCoord).addTo(map).bindPopup('<b>Base / Sede Central da Frota</b>');
 
-    const latLngs: [number, number][] = [hqCoord];
+    let isMounted = true;
 
-    works.forEach(work => {
-      const coord = getCityCoordinates(work.city);
-      latLngs.push(coord);
+    async function loadMarkers() {
+      const latLngs: [number, number][] = [hqCoord];
 
-      const marker = L.marker(coord).addTo(map);
-      marker.bindPopup(`<b>Obra: ${work.name}</b><br/>📍 ${work.city} - ${work.state}`);
+      for (const work of works) {
+        if (!isMounted) break;
+        const coord = await resolveCityCoordinates(work.city, work.state);
+        latLngs.push(coord);
 
-      L.polyline([hqCoord, coord], {
-        color: '#2563eb',
-        weight: 3,
-        opacity: 0.7,
-        dashArray: '5, 10'
-      }).addTo(map);
-    });
+        const marker = L.marker(coord).addTo(map);
+        marker.bindPopup(`<b>Obra: ${work.name}</b><br/>📍 ${work.city} - ${work.state}`);
 
-    if (latLngs.length > 1) {
-      const bounds = L.latLngBounds(latLngs);
-      map.fitBounds(bounds, { padding: [50, 50] });
+        L.polyline([hqCoord, coord], {
+          color: '#2563eb',
+          weight: 3,
+          opacity: 0.7,
+          dashArray: '5, 10'
+        }).addTo(map);
+      }
+
+      if (isMounted && latLngs.length > 1) {
+        const bounds = L.latLngBounds(latLngs);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 300);
     }
 
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 300);
+    loadMarkers();
 
+    return () => {
+      isMounted = false;
+    };
   }, [works]);
 
   return (
