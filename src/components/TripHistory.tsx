@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Search, MapPin, Calendar, Clock, Gauge, Fuel, Eye, Film, Trash2, CheckCircle, Navigation, Info, TrendingUp, Compass, Award, Hourglass } from 'lucide-react';
-import { Trip, User } from '../types';
+import { Trip, User, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
+import L from 'leaflet';
 
 interface TripHistoryProps {
   trips: Trip[];
@@ -139,62 +140,8 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
 
         {showMap && (
           <div className="space-y-4">
-            {/* Visual SVG Map Simulation */}
-            <div className="relative bg-slate-950/80 border border-slate-800 rounded-2xl p-6 overflow-hidden min-h-[260px] flex flex-col items-center justify-center">
-              {/* Grid Background */}
-              <div className="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:24px_24px] opacity-25 pointer-events-none"></div>
-
-              <div className="relative z-10 w-full max-w-3xl flex flex-col md:flex-row items-center justify-around gap-8 py-4">
-                {/* Headquarters Node */}
-                <div className="flex flex-col items-center text-center space-y-2">
-                  <div className="w-14 h-14 rounded-2xl bg-blue-600/30 border-2 border-blue-500 flex items-center justify-center text-blue-400 shadow-lg shadow-blue-500/25 animate-bounce" style={{ animationDuration: '4s' }}>
-                    <Navigation className="w-7 h-7" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold font-mono text-white block">Base / Sede Central</span>
-                    <span className="text-[10px] text-slate-400">Ponto de Partida da Frota</span>
-                  </div>
-                </div>
-
-                {/* Connecting Path Lines */}
-                <div className="hidden md:flex flex-1 items-center px-4 relative">
-                  <div className="w-full h-0.5 bg-gradient-to-r from-blue-500 via-emerald-500 to-amber-500 relative">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-2.5 py-0.5 bg-slate-900 border border-slate-700 rounded-full text-[10px] font-mono font-bold text-amber-400 shadow">
-                      {filteredTrips.length} Rotas Registradas
-                    </div>
-                  </div>
-                </div>
-
-                {/* Destination Cities Nodes */}
-                <div className="flex flex-col gap-2.5 w-full md:w-auto max-h-48 overflow-y-auto pr-2">
-                  {store.works.length === 0 ? (
-                    <div className="text-xs text-slate-400 text-center p-3 bg-slate-900 rounded-xl border border-slate-800">
-                      Nenhuma obra/cidade cadastrada.
-                    </div>
-                  ) : (
-                    store.works.map((work) => {
-                      const tripsToWork = filteredTrips.filter(t => t.workId === work.id || t.checkIn.destination.toLowerCase().includes(work.city.toLowerCase()));
-                      return (
-                        <div key={work.id} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-4 min-w-[220px]">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                              <MapPin className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <span className="text-xs font-bold text-white block">{work.name}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">📍 {work.city} - {work.state}</span>
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                            {tripsToWork.length} viagens
-                          </span>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
+            {/* Real Leaflet Map */}
+            <LeafletRouteMap works={store.works} />
 
             {/* Quick Route List / Highlights */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -511,4 +458,99 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
     </div>
   );
 }
+
+function getCityCoordinates(cityName: string): [number, number] {
+  const name = (cityName || '').toLowerCase();
+  if (name.includes('são paulo') || name.includes('sao paulo')) return [-23.5505, -46.6333];
+  if (name.includes('campinas')) return [-22.9056, -47.0608];
+  if (name.includes('rio de janeiro')) return [-22.9068, -43.1729];
+  if (name.includes('brasília') || name.includes('brasilia')) return [-15.7801, -47.9292];
+  if (name.includes('curitiba')) return [-25.4284, -49.2733];
+  if (name.includes('belo horizonte')) return [-19.9167, -43.9345];
+  if (name.includes('porto alegre')) return [-30.0346, -51.2177];
+  if (name.includes('salvador')) return [-12.9714, -38.5014];
+  if (name.includes('recife')) return [-8.0476, -34.8770];
+  if (name.includes('fortaleza')) return [-3.7172, -38.5433];
+  if (name.includes('santos')) return [-23.9608, -46.3336];
+  if (name.includes('sorocaba')) return [-23.5016, -47.4588];
+  if (name.includes('ribeirão preto') || name.includes('ribeirao preto')) return [-21.1775, -47.8103];
+  if (name.includes('são josé dos campos') || name.includes('sao jose dos campos')) return [-23.2237, -45.9009];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const latOffset = (hash % 50) / 10;
+  const lngOffset = ((hash >> 3) % 50) / 10;
+  return [-23.5505 + latOffset, -46.6333 + lngOffset];
+}
+
+function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
+  const mapRef = React.useRef<HTMLDivElement>(null);
+  const mapInstanceRef = React.useRef<L.Map | null>(null);
+
+  React.useEffect(() => {
+    if (!mapRef.current) return;
+
+    if (!mapInstanceRef.current) {
+      const map = L.map(mapRef.current, {
+        center: [-23.5505, -46.6333],
+        zoom: 7,
+        zoomControl: true,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      mapInstanceRef.current = map;
+    }
+
+    const map = mapInstanceRef.current;
+
+    map.eachLayer((layer) => {
+      if (!(layer instanceof L.TileLayer)) {
+        map.removeLayer(layer);
+      }
+    });
+
+    const hqCoord: [number, number] = [-23.5505, -46.6333];
+
+    L.marker(hqCoord).addTo(map).bindPopup('<b>Base / Sede Central da Frota</b>');
+
+    const latLngs: [number, number][] = [hqCoord];
+
+    works.forEach(work => {
+      const coord = getCityCoordinates(work.city);
+      latLngs.push(coord);
+
+      const marker = L.marker(coord).addTo(map);
+      marker.bindPopup(`<b>Obra: ${work.name}</b><br/>📍 ${work.city} - ${work.state}`);
+
+      L.polyline([hqCoord, coord], {
+        color: '#2563eb',
+        weight: 3,
+        opacity: 0.7,
+        dashArray: '5, 10'
+      }).addTo(map);
+    });
+
+    if (latLngs.length > 1) {
+      const bounds = L.latLngBounds(latLngs);
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 300);
+
+  }, [works]);
+
+  return (
+    <div className="w-full h-[380px] rounded-2xl overflow-hidden border border-slate-700 shadow-inner relative z-10">
+      <div ref={mapRef} className="w-full h-full" />
+    </div>
+  );
+}
+
 export default TripHistory;
