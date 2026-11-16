@@ -979,13 +979,18 @@ export function ManagerDashboard({
       const kmDrivenLabel = t.kmDriven ? `${t.kmDriven} KM` : 'Pendente';
       const statusLabel = t.status === 'active' ? 'Rodando' : 'Finalizado';
 
+      const origCity = t.originCity || t.checkIn.originCity || 'Palmas';
+      const origState = t.originState || t.checkIn.originState || 'TO';
+      const destCity = t.destinationCity || t.checkIn.destinationCity || '';
+      const destState = t.destinationState || t.checkIn.destinationState || '';
+
       tripRows.push([
         t.id.toUpperCase().substring(0, 8),
         t.driverName,
         t.vehicleModelPlate,
         t.workName || 'N/A',
-        t.checkIn.origin || 'Base',
-        t.checkIn.destination,
+        `${t.checkIn.origin || 'Escritório Central'} (${origCity}/${origState})`,
+        destCity ? `${t.checkIn.destination} (${destCity}${destState ? `/${destState}` : ''})` : t.checkIn.destination,
         `${t.checkIn.km} KM`,
         t.checkOut?.km ? `${t.checkOut.km} KM` : 'N/A',
         kmDrivenLabel,

@@ -260,7 +260,7 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
         {showMap && (
           <div className="space-y-4">
             {/* Real Leaflet Map */}
-            <LeafletRouteMap works={store.works} />
+            <LeafletRouteMap works={store.works} trips={filteredTrips} />
 
             {/* Quick Route List / Highlights */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -594,7 +594,15 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                       <span className="p-1.5 bg-blue-100 text-blue-600 rounded-lg">
                         <MapPin className="w-3.5 h-3.5" />
                       </span>
-                      <span>Rota: <strong className="text-slate-900">Base Central (Sede)</strong> ➔ <strong className="text-blue-600">{trip.checkIn.destination}</strong></span>
+                      <span>
+                        Rota: <strong className="text-slate-900">
+                          {trip.checkIn.origin || 'Escritório Central'}
+                          {(trip.originCity || trip.checkIn.originCity) ? ` (${trip.originCity || trip.checkIn.originCity}${(trip.originState || trip.checkIn.originState) ? `/${trip.originState || trip.checkIn.originState}` : '/TO'})` : ''}
+                        </strong> ➔ <strong className="text-blue-600">
+                          {trip.checkIn.destination}
+                          {(trip.destinationCity || trip.checkIn.destinationCity) ? ` (${trip.destinationCity || trip.checkIn.destinationCity}${(trip.destinationState || trip.checkIn.destinationState) ? `/${trip.destinationState || trip.checkIn.destinationState}` : ''})` : ''}
+                        </strong>
+                      </span>
                     </div>
                     {trip.workName && (
                       <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200">
@@ -640,8 +648,11 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                             <span className="text-slate-400 block font-bold text-[9px] uppercase font-mono tracking-wider">Início / Origem</span>
                             <p className="text-slate-850 font-bold text-[11px] flex items-center gap-1 leading-tight">
                               <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                              <span>{trip.checkIn.origin || 'Garagem Central'}</span>
+                              <span>{trip.checkIn.origin || 'Escritório Central'}</span>
                             </p>
+                            <span className="text-[10px] text-slate-500 font-medium pl-4 block">
+                              📍 {trip.originCity || trip.checkIn.originCity || 'Palmas'}/{(trip.originState || trip.checkIn.originState || 'TO')}
+                            </span>
                           </div>
                           <div className="space-y-0.5">
                             <span className="text-slate-400 block font-bold text-[9px] uppercase font-mono tracking-wider">Fim / Destino</span>
@@ -649,6 +660,9 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                               <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
                               <span>{trip.checkIn.destination}</span>
                             </p>
+                            <span className="text-[10px] text-blue-600 font-semibold pl-4 block">
+                              📍 {trip.destinationCity || trip.checkIn.destinationCity || 'Não informado'}{(trip.destinationState || trip.checkIn.destinationState) ? `/${trip.destinationState || trip.checkIn.destinationState}` : ''}
+                            </span>
                           </div>
                         </div>
                         <div className="col-span-2 space-y-0.5">
@@ -877,13 +891,17 @@ const stateCenters: Record<string, [number, number]> = {
 async function resolveCityCoordinates(city: string, state: string): Promise<[number, number]> {
   const cleanCity = (city || '').trim().toLowerCase();
   const cleanState = (state || '').trim().toLowerCase();
+  const cacheKey = cleanState ? `${cleanCity}|${cleanState}` : cleanCity;
   
-  if (cityCoordsCache[cleanCity]) {
+  if (cityCoordsCache[cacheKey]) {
+    return cityCoordsCache[cacheKey];
+  }
+  if (!cleanState && cityCoordsCache[cleanCity]) {
     return cityCoordsCache[cleanCity];
   }
 
   try {
-    const query = `${city}, ${state}, Brazil`;
+    const query = cleanState ? `${city}, ${state}, Brazil` : `${city}, Brazil`;
     const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`, {
       headers: { 'Accept-Language': 'pt-BR' }
     });
@@ -891,21 +909,25 @@ async function resolveCityCoordinates(city: string, state: string): Promise<[num
     if (data && data.length > 0) {
       const lat = parseFloat(data[0].lat);
       const lon = parseFloat(data[0].lon);
-      cityCoordsCache[cleanCity] = [lat, lon];
+      cityCoordsCache[cacheKey] = [lat, lon];
       return [lat, lon];
     }
   } catch (err) {
     console.warn('Geocoding fetch failed for:', city, state, err);
   }
 
+  if (cityCoordsCache[cleanCity]) {
+    return cityCoordsCache[cleanCity];
+  }
+
   if (stateCenters[cleanState]) {
     return stateCenters[cleanState];
   }
 
-  return [-23.5505, -46.6333];
+  return [-10.184, -48.3336];
 }
 
-function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
+function LeafletRouteMap({ works, trips = [] }: { works: ConstructionWork[]; trips?: Trip[] }) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const mapInstanceRef = React.useRef<L.Map | null>(null);
 
@@ -959,6 +981,35 @@ function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
         }).addTo(map);
       }
 
+      // Plot registered trip routes that include origin/destination municipalities with state
+      const plottedRoutes = new Set<string>();
+      for (const trip of trips) {
+        if (!isMounted) break;
+        const destCity = trip.destinationCity || trip.checkIn.destinationCity;
+        const destState = trip.destinationState || trip.checkIn.destinationState || '';
+        if (!destCity) continue;
+
+        const origCity = trip.originCity || trip.checkIn.originCity || 'Palmas';
+        const origState = trip.originState || trip.checkIn.originState || 'TO';
+        const routeKey = `${origCity.toLowerCase()}|${origState.toLowerCase()}->${destCity.toLowerCase()}|${destState.toLowerCase()}`;
+        if (plottedRoutes.has(routeKey)) continue;
+        plottedRoutes.add(routeKey);
+
+        const origCoord = await resolveCityCoordinates(origCity, origState);
+        const destCoord = await resolveCityCoordinates(destCity, destState);
+        latLngs.push(origCoord, destCoord);
+
+        L.marker(destCoord).addTo(map).bindPopup(
+          `<b>Destino Viagem: ${trip.checkIn.destination}</b><br/>📍 ${destCity}${destState ? ` - ${destState}` : ''}`
+        );
+
+        L.polyline([origCoord, destCoord], {
+          color: '#10b981',
+          weight: 3,
+          opacity: 0.85
+        }).addTo(map);
+      }
+
       if (isMounted && latLngs.length > 1) {
         const bounds = L.latLngBounds(latLngs);
         map.fitBounds(bounds, { padding: [50, 50] });
@@ -974,7 +1025,7 @@ function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
     return () => {
       isMounted = false;
     };
-  }, [works]);
+  }, [works, trips]);
 
   return (
     <div className="w-full h-[380px] rounded-2xl overflow-hidden border border-slate-700 shadow-inner relative z-10">

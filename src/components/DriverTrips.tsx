@@ -11,6 +11,12 @@ interface DriverTripsProps {
   works: ConstructionWork[];
 }
 
+const BRAZILIAN_UFS = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO',
+  'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI',
+  'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
+
 export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }: DriverTripsProps) {
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
 
@@ -30,7 +36,11 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
   const [checkInFuel, setCheckInFuel] = useState('1/2');
   const [selectedWorkId, setSelectedWorkId] = useState('');
   const [origin, setOrigin] = useState('Garagem Central (Geral)');
+  const [originCity, setOriginCity] = useState('Palmas');
+  const [originState, setOriginState] = useState('TO');
   const [destination, setDestination] = useState('');
+  const [destinationCity, setDestinationCity] = useState('');
+  const [destinationState, setDestinationState] = useState('');
   const [reason, setReason] = useState('');
   const [checkInObs, setCheckInObs] = useState('');
   
@@ -53,18 +63,30 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
           setSelectedWorkId(veh.workId);
           const matchedWork = works.find(w => w.id === veh.workId);
           if (matchedWork) {
-            setOrigin(`${matchedWork.name} (${matchedWork.city} - ${matchedWork.state})`);
+            setOrigin(`${matchedWork.name}`);
+            setOriginCity(matchedWork.city || 'Palmas');
+            setOriginState(matchedWork.state || 'TO');
             setDestination(''); // Driver will fill in manually
+            setDestinationCity('');
+            setDestinationState('');
             setReason(`Transporte saindo de obra: ${matchedWork.name}`);
           } else {
             setOrigin('Garagem Central (Geral)');
+            setOriginCity('Palmas');
+            setOriginState('TO');
             setDestination('');
+            setDestinationCity('');
+            setDestinationState('');
             setReason('');
           }
         } else {
           setSelectedWorkId('');
           setOrigin('Garagem Central (Geral)');
+          setOriginCity('Palmas');
+          setOriginState('TO');
           setDestination('');
+          setDestinationCity('');
+          setDestinationState('');
           setReason('');
         }
       }
@@ -72,7 +94,11 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       setCheckInKm('');
       setSelectedWorkId('');
       setOrigin('Garagem Central (Geral)');
+      setOriginCity('Palmas');
+      setOriginState('TO');
       setDestination('');
+      setDestinationCity('');
+      setDestinationState('');
       setReason('');
     }
     setErrorMsg('');
@@ -100,8 +126,28 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       setErrorMsg('Por favor, informe uma quilometragem inicial válida.');
       return;
     }
+    if (!origin.trim()) {
+      setErrorMsg('Por favor, informe o ponto de partida / origem.');
+      return;
+    }
+    if (!originCity.trim()) {
+      setErrorMsg('Por favor, informe o município de origem.');
+      return;
+    }
+    if (!originState.trim() || originState.trim().length !== 2) {
+      setErrorMsg('Por favor, selecione o estado (UF) do município de origem.');
+      return;
+    }
     if (!destination.trim()) {
       setErrorMsg('Por favor, defina um destino.');
+      return;
+    }
+    if (!destinationCity.trim()) {
+      setErrorMsg('Por favor, informe o município de destino.');
+      return;
+    }
+    if (!destinationState.trim() || destinationState.trim().length !== 2) {
+      setErrorMsg('Por favor, selecione o estado (UF) do município de destino.');
       return;
     }
     if (!reason.trim()) {
@@ -113,7 +159,11 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       km: Number(checkInKm),
       fuel: checkInFuel,
       origin: origin.trim(),
+      originCity: originCity.trim(),
+      originState: originState.trim().toUpperCase(),
       destination: destination.trim(),
+      destinationCity: destinationCity.trim(),
+      destinationState: destinationState.trim().toUpperCase(),
       reason: reason.trim(),
       observations: checkInObs.trim()
     }, selectedWorkId || undefined);
@@ -126,7 +176,11 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       setCheckInFuel('1/2');
       setSelectedWorkId('');
       setOrigin('Garagem Central (Geral)');
+      setOriginCity('Palmas');
+      setOriginState('TO');
       setDestination('');
+      setDestinationCity('');
+      setDestinationState('');
       setReason('');
       setCheckInObs('');
       
@@ -175,6 +229,22 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
 
   const availableVehicles = vehicles.filter(v => v.status === 'available' && (currentUser?.role === 'admin' || currentUser?.authorizedAssetIds?.includes(v.id)));
 
+  // List of suggested municipalities from registered works + central base
+  const suggestedCities = Array.from(
+    new Set([
+      'Palmas',
+      ...works.map(w => w.city).filter(Boolean),
+      'Araguaína',
+      'Gurupi',
+      'Porto Nacional',
+      'Paraíso do Tocantins',
+      'Colinas do Tocantins',
+      'Guaraí',
+      'Dianópolis',
+      'Miracema do Tocantins'
+    ])
+  );
+
   return (
     <div id="driver_trips_view" className="space-y-6">
       {/* Dynamic Trip Stage Selector Header */}
@@ -211,6 +281,13 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
           </div>
 
           <form id="checkin_trip_form" onSubmit={handleCheckInSubmit} className="space-y-6">
+            {/* Auto-suggested municipalities datalist */}
+            <datalist id="trip_cities_list">
+              {suggestedCities.map((c, i) => (
+                <option key={i} value={c} />
+              ))}
+            </datalist>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* Vehicle Selection Block */}
@@ -324,26 +401,73 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
                 </p>
               </div>
 
-              {/* Origin of the trip */}
+              {/* Origin Section: Location and Municipality */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Origem da Viagem *</label>
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">
+                  Local / Ponto de Partida (Origem) *
+                </label>
                 <div className="relative">
                   <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
                     value={origin}
                     onChange={(e) => setOrigin(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-semibold text-slate-600"
-                    placeholder="Ex: Garagem Central"
+                    className="w-full pl-10 pr-4 py-3 text-sm bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-semibold text-slate-700"
+                    placeholder="Ex: Escritório Central ou Garagem"
                     required
                   />
                 </div>
-                <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Obra pré-alocada pelo gestor, ou ponto de partida customizado.</p>
+                <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Obra pré-alocada pelo gestor, garagem ou ponto de saída.</p>
               </div>
 
-              {/* Destination */}
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">
+                    Município de Origem *
+                  </label>
+                  <div className="relative">
+                    <Navigation className="w-4 h-4 text-blue-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      list="trip_cities_list"
+                      value={originCity}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setOriginCity(val);
+                        const matched = works.find(w => w.city?.toLowerCase() === val.trim().toLowerCase());
+                        if (matched?.state) setOriginState(matched.state);
+                        else if (val.trim().toLowerCase() === 'palmas') setOriginState('TO');
+                      }}
+                      className="w-full pl-10 pr-3 py-3 text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-semibold text-slate-800"
+                      placeholder="Ex: Palmas"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="col-span-1 space-y-1.5">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">
+                    Estado (UF) *
+                  </label>
+                  <select
+                    value={originState}
+                    onChange={(e) => setOriginState(e.target.value)}
+                    className="w-full px-3 py-3 text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold text-slate-800 cursor-pointer"
+                    required
+                  >
+                    <option value="">UF</option>
+                    {BRAZILIAN_UFS.map((uf) => (
+                      <option key={uf} value={uf}>{uf}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="col-span-3 text-[9px] text-slate-400 leading-tight">Cidade e estado de partida (Sede Central: Palmas/TO).</p>
+              </div>
+
+              {/* Destination Section: Location and Municipality + State */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Destino Planejado *</label>
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">
+                  Local / Ponto de Chegada (Destino) *
+                </label>
                 <div className="relative">
                   <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
@@ -351,11 +475,56 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
                     value={destination}
                     onChange={(e) => setDestination(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-medium animate-none"
-                    placeholder="Ex: Filial Bauru ou Cliente X"
+                    placeholder="Ex: Canteiro de Obras Norte, Fornecedor ou Cliente X"
                     required
                   />
                 </div>
-                <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Indique para onde este veículo se deslocará.</p>
+                <p className="text-[9px] text-slate-400 mt-0.5 leading-tight">Indique o local específico onde o veículo irá chegar.</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="col-span-2 space-y-1.5">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">
+                    Município de Destino *
+                  </label>
+                  <div className="relative">
+                    <Navigation className="w-4 h-4 text-emerald-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      list="trip_cities_list"
+                      value={destinationCity}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDestinationCity(val);
+                        const matched = works.find(w => w.city?.toLowerCase() === val.trim().toLowerCase());
+                        if (matched?.state) setDestinationState(matched.state);
+                        else if (['palmas', 'araguaína', 'araguaina', 'gurupi', 'porto nacional', 'paraíso do tocantins', 'paraiso do tocantins', 'colinas do tocantins', 'guaraí', 'guarai', 'dianópolis', 'dianopolis', 'miracema do tocantins'].includes(val.trim().toLowerCase())) {
+                          setDestinationState('TO');
+                        }
+                      }}
+                      className="w-full pl-10 pr-3 py-3 text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-semibold text-slate-800"
+                      placeholder="Ex: Araguaína, Gurupi..."
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="col-span-1 space-y-1.5">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">
+                    Estado (UF) *
+                  </label>
+                  <select
+                    value={destinationState}
+                    onChange={(e) => setDestinationState(e.target.value)}
+                    className="w-full px-3 py-3 text-sm bg-[#F8FAFC] border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl outline-none transition-all font-bold text-slate-800 cursor-pointer"
+                    required
+                  >
+                    <option value="">UF</option>
+                    {BRAZILIAN_UFS.map((uf) => (
+                      <option key={uf} value={uf}>{uf}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="col-span-3 text-[9px] text-slate-400 leading-tight">Cidade e estado (UF) do destino planejado.</p>
               </div>
 
               {/* Motif / Reason */}
@@ -430,8 +599,22 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
             <div className="space-y-0.5">
               <span className="text-[9px] uppercase font-bold text-blue-500 block tracking-wider font-mono">Rota (Origem / Destino)</span>
               <div className="text-xs font-bold text-blue-900 leading-tight space-y-0.5">
-                <p className="flex items-center gap-1"><span className="text-slate-400 font-medium font-mono text-[9px] uppercase">Origem:</span> {activeTrip.checkIn.origin || 'Garagem Central'}</p>
-                <p className="flex items-center gap-1"><span className="text-blue-600 font-medium font-mono text-[9px] uppercase">Destino:</span> {activeTrip.checkIn.destination}</p>
+                <p className="flex items-center gap-1">
+                  <span className="text-slate-400 font-medium font-mono text-[9px] uppercase">Origem:</span> 
+                  {activeTrip.checkIn.origin || 'Escritório Central'} 
+                  <span className="text-blue-700 font-semibold text-[11px]">
+                    ({activeTrip.originCity || activeTrip.checkIn.originCity || 'Palmas'}
+                    {(activeTrip.originState || activeTrip.checkIn.originState) ? `/${activeTrip.originState || activeTrip.checkIn.originState}` : '/TO'})
+                  </span>
+                </p>
+                <p className="flex items-center gap-1">
+                  <span className="text-blue-600 font-medium font-mono text-[9px] uppercase">Destino:</span> 
+                  {activeTrip.checkIn.destination} 
+                  <span className="text-emerald-700 font-semibold text-[11px]">
+                    ({activeTrip.destinationCity || activeTrip.checkIn.destinationCity || 'Não informado'}
+                    {(activeTrip.destinationState || activeTrip.checkIn.destinationState) ? `/${activeTrip.destinationState || activeTrip.checkIn.destinationState}` : ''})
+                  </span>
+                </p>
               </div>
             </div>
             <div className="space-y-0.5">

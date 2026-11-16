@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle, Pencil, Ban } from 'lucide-react';
+import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle, Pencil, Ban, CalendarRange } from 'lucide-react';
 import { Vehicle, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
 
@@ -25,6 +25,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [category, setCategory] = useState<string>(store.vehicleCategories[0]?.name || '');
   const [selectedWorkId, setSelectedWorkId] = useState('');
   const [tankCapacity, setTankCapacity] = useState<string>('');
+  const [hasLogisticsControl, setHasLogisticsControl] = useState<boolean>(false);
   const [status, setStatus] = useState<'available' | 'maintenance' | 'inactive'>('available');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -40,6 +41,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setCategory(vehicle.category || store.vehicleCategories[0]?.name || '');
     setSelectedWorkId(vehicle.workId || '');
     setTankCapacity(vehicle.tankCapacityLiters ? vehicle.tankCapacityLiters.toString() : '');
+    setHasLogisticsControl(Boolean(vehicle.hasLogisticsControl));
     setStatus(vehicle.status === 'inactive' ? 'inactive' : vehicle.status === 'maintenance' ? 'maintenance' : 'available');
     setFormError('');
     setFormSuccess('');
@@ -58,6 +60,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setCategory(store.vehicleCategories[0]?.name || '');
     setSelectedWorkId('');
     setTankCapacity('');
+    setHasLogisticsControl(false);
     setStatus('available');
     setFormError('');
     setFormSuccess('');
@@ -112,6 +115,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         workName: matchedWork?.name,
         category: category,
         tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
+        hasLogisticsControl,
         status: finalStatus,
         isActive: finalStatus !== 'inactive'
       };
@@ -133,7 +137,8 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         workId: matchedWork?.id,
         workName: matchedWork?.name,
         category: category,
-        tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined
+        tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
+        hasLogisticsControl
       });
 
       if (result.success) {
@@ -147,6 +152,8 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
         setInitialKm(0);
         setCategory(store.vehicleCategories[0]?.name || '');
         setSelectedWorkId('');
+        setTankCapacity('');
+        setHasLogisticsControl(false);
         
         // Auto close form after briefly showing success
         setTimeout(() => {
@@ -423,6 +430,67 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               <p className="text-[10px] text-slate-400 mt-1 font-medium">Você pode alocar o veículo a uma obra específica para controle de checkout e roteiro, ou escolher Geral.</p>
             </div>
 
+            {/* Logistics Control Toggle Question */}
+            <div className="md:col-span-3 bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block text-[11px] uppercase font-bold tracking-wider text-slate-700">
+                    Controle de Logística *
+                  </label>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Este veículo possuirá controle de logística (programação de viagens, permanência em obras/cidades, locação para terceiros e calendário)?
+                  </p>
+                </div>
+                <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border self-start sm:self-center whitespace-nowrap ${
+                  hasLogisticsControl
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-white text-slate-500 border-slate-200'
+                }`}>
+                  {hasLogisticsControl ? 'Sim, possui controle' : 'Não possui controle'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setHasLogisticsControl(true)}
+                  className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                    hasLogisticsControl
+                      ? 'bg-white border-blue-600 text-blue-950 shadow-xs ring-1 ring-blue-600'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <CalendarRange className={`w-4 h-4 ${hasLogisticsControl ? 'text-blue-600' : 'text-slate-400'}`} />
+                    <div className="text-left">
+                      <span className="block font-bold">Sim, possui Controle de Logística</span>
+                      <span className="text-[10px] font-normal text-slate-500">Habilita agenda de destinos, obras e locações</span>
+                    </div>
+                  </div>
+                  {hasLogisticsControl && <span className="text-blue-600 font-bold text-xs">Selecionado</span>}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setHasLogisticsControl(false)}
+                  className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                    !hasLogisticsControl
+                      ? 'bg-white border-slate-700 text-slate-900 shadow-xs ring-1 ring-slate-700'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Ban className={`w-4 h-4 ${!hasLogisticsControl ? 'text-slate-700' : 'text-slate-400'}`} />
+                    <div className="text-left">
+                      <span className="block font-bold">Não possui Controle de Logística</span>
+                      <span className="text-[10px] font-normal text-slate-500">Uso padrão apenas com check-in/check-out</span>
+                    </div>
+                  </div>
+                  {!hasLogisticsControl && <span className="text-slate-700 font-bold text-xs">Selecionado</span>}
+                </button>
+              </div>
+            </div>
+
             {/* Inactivation control when editing */}
             {editingVehicle && (
               <div className="md:col-span-3 bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2">
@@ -625,18 +693,33 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                   </h4>
 
                   {/* Attributes details */}
-                  <div className="grid grid-cols-3 gap-2 mt-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div>
                       <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Ano</span>
-                      <span className="font-bold text-slate-800">{vehicle.year}</span>
+                      <span className="font-bold text-slate-800 tabular-nums">{vehicle.year}</span>
                     </div>
                     <div>
                       <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Odômetro</span>
-                      <span className="font-bold text-slate-800 font-mono">{vehicle.currentKm.toLocaleString()} km</span>
+                      <span className="font-bold text-slate-800 font-mono tabular-nums">{vehicle.currentKm.toLocaleString()} km</span>
                     </div>
                     <div>
                       <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Tanque</span>
-                      <span className="font-bold text-blue-800 font-mono">{vehicle.tankCapacityLiters ? `${vehicle.tankCapacityLiters} L` : 'Não def.'}</span>
+                      <span className="font-bold text-blue-800 font-mono tabular-nums">{vehicle.tankCapacityLiters ? `${vehicle.tankCapacityLiters} L` : 'Não def.'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Logística</span>
+                      <button
+                        type="button"
+                        onClick={() => store.toggleVehicleLogisticsControl(vehicle.id, !vehicle.hasLogisticsControl)}
+                        title="Clique para ativar ou desativar o Controle de Logística"
+                        className={`text-left font-bold cursor-pointer transition-colors ${
+                          vehicle.hasLogisticsControl
+                            ? 'text-blue-700 hover:text-blue-900'
+                            : 'text-slate-400 hover:text-slate-700'
+                        }`}
+                      >
+                        {vehicle.hasLogisticsControl ? 'Ativo' : 'Não possui'}
+                      </button>
                     </div>
                   </div>
 

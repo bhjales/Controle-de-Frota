@@ -56,6 +56,7 @@ export interface Vehicle {
   maintenanceHistory?: MaintenanceLog[];
   category?: string;
   tankCapacityLiters?: number; // Tamanho do tanque em Litros
+  hasLogisticsControl?: boolean; // Indica se o veículo participa do Controle de Logística
 }
 
 export interface VehicleCategory {
@@ -67,7 +68,11 @@ export interface CheckInDetails {
   km: number;
   fuel: string; // Vazio, 1/4, 1/2, 3/4, Cheio
   origin?: string; // Trip origin location
+  originCity?: string; // Município de Origem
+  originState?: string; // Estado (UF) de Origem
   destination: string;
+  destinationCity?: string; // Município de Destino
+  destinationState?: string; // Estado (UF) de Destino
   reason: string;
   observations: string;
   photo?: string; // Optional photo
@@ -92,6 +97,10 @@ export interface Trip {
   status: 'active' | 'completed';
   workId?: string; // Associated construction work (Obra)
   workName?: string;
+  originCity?: string; // Município de Origem
+  originState?: string; // Estado (UF) de Origem
+  destinationCity?: string; // Município de Destino
+  destinationState?: string; // Estado (UF) de Destino
   checkIn: CheckInDetails;
   checkOut?: CheckOutDetails;
   kmDriven?: number;
@@ -260,3 +269,34 @@ export interface WorkFuelBalance {
   byFuelType?: Record<string, FuelTypeMetric>;
 }
 
+export type LogisticsAllocationType = 'uso_programado' | 'viagem' | 'obra' | 'cidade' | 'terceiros';
+export type LogisticsScheduleStatus = 'programado' | 'em_andamento' | 'concluido' | 'cancelado';
+
+export interface LogisticsSchedule {
+  id: string;
+  vehicleId: string;
+  vehicleModelPlate: string;
+  allocationType: LogisticsAllocationType;
+  scheduleStatus: LogisticsScheduleStatus;
+  isThirdPartyRental: boolean; // Status se o veículo será locado para terceiros
+  thirdPartyName?: string;     // Nome do terceiro/empresa locatária
+  workId?: string;
+  workName?: string;
+  programDescription?: string; // Compatibilidade retroativa
+  originWorkId?: string;
+  originWorkName?: string;
+  originLabel?: string;
+  originCity?: string;
+  originState?: string;
+  destinationLabel: string;
+  destinationCity: string;
+  destinationState: string;
+  cargoDescription?: string;   // O que é a carga transportada
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  driverId?: string;
+  driverName?: string;
+  notes?: string;
+  createdBy?: string;
+  createdAt: string;
+}

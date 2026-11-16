@@ -69,7 +69,12 @@ export function getFilteredTripData(options: TripReportOptions): Trip[] {
     filtered = filtered.filter(t => 
       t.driverName.toLowerCase().includes(q) ||
       t.vehicleModelPlate.toLowerCase().includes(q) ||
+      (t.checkIn.origin && t.checkIn.origin.toLowerCase().includes(q)) ||
+      (t.originCity && t.originCity.toLowerCase().includes(q)) ||
+      (t.originState && t.originState.toLowerCase().includes(q)) ||
       t.checkIn.destination.toLowerCase().includes(q) ||
+      (t.destinationCity && t.destinationCity.toLowerCase().includes(q)) ||
+      (t.destinationState && t.destinationState.toLowerCase().includes(q)) ||
       t.checkIn.reason.toLowerCase().includes(q) ||
       (t.workName && t.workName.toLowerCase().includes(q))
     );
@@ -495,9 +500,17 @@ export function exportTripReportPDF(options: TripReportOptions) {
       ? new Date(trip.checkOut.time).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) 
       : 'Em trânsito';
 
-    const origin = trip.checkIn.origin || 'Base / Sede Central (Palmas/TO)';
+    const originCity = trip.originCity || trip.checkIn.originCity || 'Palmas';
+    const originState = trip.originState || trip.checkIn.originState || 'TO';
+    const destinationCity = trip.destinationCity || trip.checkIn.destinationCity || '';
+    const destinationState = trip.destinationState || trip.checkIn.destinationState || '';
+    const origin = trip.checkIn.origin || 'Escritório Central';
     const destination = trip.checkIn.destination || 'Não especificado';
-    const route = `${origin} -> ${destination}`;
+    const originLoc = originCity ? `${originCity}${originState ? `/${originState}` : ''}` : '';
+    const destLoc = destinationCity ? `${destinationCity}${destinationState ? `/${destinationState}` : ''}` : '';
+    const originFormatted = originLoc ? `${origin} (${originLoc})` : origin;
+    const destFormatted = destLoc ? `${destination} (${destLoc})` : destination;
+    const route = `${originFormatted} -> ${destFormatted}`;
 
     const kmInitial = trip.checkIn.km.toLocaleString('pt-BR');
     const kmFinal = trip.checkOut?.km ? trip.checkOut.km.toLocaleString('pt-BR') : '-';
@@ -615,8 +628,12 @@ export function exportTripsConsolidatedCSV(options: TripReportOptions) {
     'Veiculo Modelo',
     'Placa',
     'Canteiro Obra',
-    'Origem',
-    'Destino',
+    'Origem (Local)',
+    'Municipio Origem',
+    'Estado Origem (UF)',
+    'Destino (Local)',
+    'Municipio Destino',
+    'Estado Destino (UF)',
     'KM Inicial',
     'KM Final',
     'Distancia Percorrida (KM)',
@@ -639,8 +656,12 @@ export function exportTripsConsolidatedCSV(options: TripReportOptions) {
       veh?.model || t.vehicleModelPlate,
       veh?.plate || '',
       t.workName || 'Geral',
-      t.checkIn.origin || 'Base / Sede Central',
+      t.checkIn.origin || 'Escritório Central',
+      t.originCity || t.checkIn.originCity || 'Palmas',
+      t.originState || t.checkIn.originState || 'TO',
       t.checkIn.destination,
+      t.destinationCity || t.checkIn.destinationCity || '',
+      t.destinationState || t.checkIn.destinationState || '',
       t.checkIn.km,
       t.checkOut?.km || '',
       t.kmDriven !== undefined ? t.kmDriven : '',

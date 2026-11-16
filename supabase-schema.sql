@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
     "maintenanceReason" TEXT,
     "maintenanceSentAt" TEXT,
     "maintenanceHistory" JSONB DEFAULT '[]'::jsonb,
+    "hasLogisticsControl" BOOLEAN DEFAULT false,
     "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -132,6 +133,10 @@ CREATE TABLE IF NOT EXISTS public.trips (
     status TEXT DEFAULT 'active', -- 'active' ou 'completed'
     "workId" TEXT REFERENCES public.construction_works(id) ON DELETE SET NULL,
     "workName" TEXT,
+    "originCity" TEXT,
+    "originState" TEXT,
+    "destinationCity" TEXT,
+    "destinationState" TEXT,
     "checkIn" JSONB,
     "checkOut" JSONB,
     "kmDriven" NUMERIC DEFAULT 0,
@@ -234,6 +239,38 @@ CREATE TABLE IF NOT EXISTS public.fuel_dispenses (
     "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- ------------------------------------------------------------------------------
+-- 13. TABELA: logistics_schedules (Programação e Calendário do Controle de Logística)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.logistics_schedules (
+    id TEXT PRIMARY KEY,
+    "vehicleId" TEXT REFERENCES public.vehicles(id) ON DELETE CASCADE,
+    "vehicleModelPlate" TEXT,
+    "allocationType" TEXT NOT NULL DEFAULT 'uso_programado', -- 'uso_programado'
+    "scheduleStatus" TEXT NOT NULL DEFAULT 'programado', -- 'programado', 'em_andamento', 'concluido', 'cancelado'
+    "isThirdPartyRental" BOOLEAN DEFAULT false,
+    "thirdPartyName" TEXT,
+    "workId" TEXT REFERENCES public.construction_works(id) ON DELETE SET NULL,
+    "workName" TEXT,
+    "programDescription" TEXT,
+    "originWorkId" TEXT REFERENCES public.construction_works(id) ON DELETE SET NULL,
+    "originWorkName" TEXT,
+    "originLabel" TEXT,
+    "originCity" TEXT,
+    "originState" TEXT,
+    "destinationLabel" TEXT NOT NULL,
+    "destinationCity" TEXT NOT NULL,
+    "destinationState" TEXT NOT NULL,
+    "cargoDescription" TEXT,
+    "startDate" TEXT NOT NULL,
+    "endDate" TEXT NOT NULL,
+    "driverId" TEXT REFERENCES public.users(id) ON DELETE SET NULL,
+    "driverName" TEXT,
+    notes TEXT,
+    "createdBy" TEXT,
+    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ==============================================================================
 -- SCRIPT DE ATUALIZAÇÃO / MIGRAÇÃO INCREMENTAL (CASO AS TABELAS JÁ EXISTAM)
 -- Executar este bloco garante que colunas adicionadas recentemente passem a existir
@@ -286,6 +323,21 @@ ALTER TABLE public.fuel_dispenses ADD COLUMN IF NOT EXISTS "unitCost" NUMERIC;
 ALTER TABLE public.fuel_dispenses ADD COLUMN IF NOT EXISTS "totalCost" NUMERIC;
 ALTER TABLE public.fuel_dispenses ADD COLUMN IF NOT EXISTS "calculatedCost" NUMERIC;
 
+-- Atualização na tabela trips (Município e UF de Origem e Destino)
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "originCity" TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "originState" TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "destinationCity" TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "destinationState" TEXT;
+
+-- Atualização na tabela vehicles (Controle de Logística)
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "hasLogisticsControl" BOOLEAN DEFAULT false;
+
+-- Atualização na tabela logistics_schedules (Obra de Origem, Descrição Livre e Descrição da Carga)
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkId" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkName" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "programDescription" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "cargoDescription" TEXT;
+
 -- ==============================================================================
 -- CRIAÇÃO DE ÍNDICES PARA PERFORMANCE
 -- ==============================================================================
@@ -300,6 +352,8 @@ CREATE INDEX IF NOT EXISTS idx_fuel_inflows_work ON public.fuel_inflows("workId"
 CREATE INDEX IF NOT EXISTS idx_fuel_dispenses_vehicle ON public.fuel_dispenses("vehicleId");
 CREATE INDEX IF NOT EXISTS idx_fuel_dispenses_type ON public.fuel_dispenses("dispenseType");
 CREATE INDEX IF NOT EXISTS idx_suppliers_cnpj ON public.suppliers(cnpj);
+CREATE INDEX IF NOT EXISTS idx_logistics_vehicle ON public.logistics_schedules("vehicleId");
+CREATE INDEX IF NOT EXISTS idx_logistics_dates ON public.logistics_schedules("startDate", "endDate");
 
 -- ==============================================================================
 -- HABILITAÇÃO DE ROW LEVEL SECURITY (RLS) E POLÍTICAS DE ACESSO
@@ -314,7 +368,8 @@ BEGIN
         AND tablename IN (
             'equipment_types', 'vehicle_categories', 'construction_works', 
             'users', 'suppliers', 'vehicles', 'equipments', 'trips', 
-            'equipment_usages', 'maintenance_logs', 'fuel_inflows', 'fuel_dispenses'
+            'equipment_usages', 'maintenance_logs', 'fuel_inflows', 'fuel_dispenses',
+            'logistics_schedules'
         )
     LOOP
         EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);

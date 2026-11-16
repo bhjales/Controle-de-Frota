@@ -1,4 +1,4 @@
-import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog, Supplier, SupplierCategory, FuelInflow, FuelDispense, FuelDispenseType, FiscalDocType, WorkFuelBalance } from '../types';
+import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog, Supplier, SupplierCategory, FuelInflow, FuelDispense, FuelDispenseType, FiscalDocType, WorkFuelBalance, LogisticsSchedule, LogisticsAllocationType, LogisticsScheduleStatus } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Simple high-quality odometer and dashboard SVGs represented as base64 or clean dataURI to seed initial photos nicely
@@ -139,6 +139,7 @@ export class FleetStore {
   public suppliers: Supplier[] = [];
   public fuelInflows: FuelInflow[] = [];
   public fuelDispenses: FuelDispense[] = [];
+  public logisticsSchedules: LogisticsSchedule[] = [];
   public currentUser: User | null = null;
 
   // Snapshot for differential syncing
@@ -160,6 +161,7 @@ export class FleetStore {
       suppliers: JSON.stringify(this.suppliers),
       fuelInflows: JSON.stringify(this.fuelInflows),
       fuelDispenses: JSON.stringify(this.fuelDispenses),
+      logisticsSchedules: JSON.stringify(this.logisticsSchedules),
     };
   }
 
@@ -212,7 +214,8 @@ export class FleetStore {
         maintenanceLogs,
         suppliers,
         fuelInflows,
-        fuelDispenses
+        fuelDispenses,
+        logisticsSchedules
       ] = await Promise.all([
         fetchTable('users'),
         fetchTable('vehicles'),
@@ -225,7 +228,8 @@ export class FleetStore {
         fetchTable('maintenance_logs'),
         fetchTable('suppliers'),
         fetchTable('fuel_inflows'),
-        fetchTable('fuel_dispenses')
+        fetchTable('fuel_dispenses'),
+        fetchTable('logistics_schedules')
       ]);
 
       if (users !== null) {
@@ -269,6 +273,7 @@ export class FleetStore {
       if (suppliers !== null) this.suppliers = suppliers as Supplier[];
       if (fuelInflows !== null) this.fuelInflows = fuelInflows as FuelInflow[];
       if (fuelDispenses !== null) this.fuelDispenses = fuelDispenses as FuelDispense[];
+      if (logisticsSchedules !== null) this.logisticsSchedules = logisticsSchedules as LogisticsSchedule[];
       
       const vData = vehicles as Vehicle[] | null;
       const eData = equipments as Equipment[] | null;
@@ -380,6 +385,16 @@ export class FleetStore {
             }
           }
 
+          // Clean up logistics_schedules relation keys
+          if (table === 'logistics_schedules') {
+            if (copy.driverId && !userIds.has(copy.driverId)) {
+              copy.driverId = null;
+            }
+            if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
+              copy.vehicleId = null;
+            }
+          }
+
           // Apply dynamic column exclusion list
           for (const col of colsToExclude) {
             delete copy[col];
@@ -394,49 +409,45 @@ export class FleetStore {
       
       let { error } = await supabase.from(table).upsert(sanitized);
 
-      if (error) {
-        // Check if there is a missing column schema error
+      let attempts = 0;
+      while (error && attempts < 8) {
+        attempts++;
         const isColumnSchemaError = 
           error.message.includes('schema cache') || 
           error.message.includes('column') || 
           error.message.includes('does not exist');
 
-        if (isColumnSchemaError) {
-          // Detect missing columns dynamically if matches
-          const match = error.message.match(/Could not find the '([^']+)' column/i);
-          if (match && match[1]) {
-            columnsToExclude.push(match[1]);
-          } else {
-            // Under users table, fallback to strip 'isApproved' and 'password' pre-emptively
-            if (table === 'users') {
-              if (error.message.includes('isApproved')) {
-                columnsToExclude.push('isApproved');
-              }
-              if (error.message.includes('password')) {
-                columnsToExclude.push('password');
-              }
-              if (columnsToExclude.length === 0) {
-                columnsToExclude.push('isApproved', 'password');
-              }
-            }
+        if (!isColumnSchemaError) break;
+
+        let added = false;
+        const match = error.message.match(/Could not find the '([^']+)' column/i);
+        if (match && match[1] && !columnsToExclude.includes(match[1])) {
+          columnsToExclude.push(match[1]);
+          added = true;
+        } else if (table === 'users') {
+          if (error.message.includes('isApproved') && !columnsToExclude.includes('isApproved')) {
+            columnsToExclude.push('isApproved');
+            added = true;
           }
-
-          if (columnsToExclude.length > 0) {
-            sanitized = getSanitizedItems(columnsToExclude);
-            const retryRes = await supabase.from(table).upsert(sanitized);
-            error = retryRes.error;
-
-            if (error) {
-              const match2 = error.message.match(/Could not find the '([^']+)' column/i);
-              if (match2 && match2[1] && !columnsToExclude.includes(match2[1])) {
-                columnsToExclude.push(match2[1]);
-                sanitized = getSanitizedItems(columnsToExclude);
-                const retryRes2 = await supabase.from(table).upsert(sanitized);
-                error = retryRes2.error;
+          if (error.message.includes('password') && !columnsToExclude.includes('password')) {
+            columnsToExclude.push('password');
+            added = true;
+          }
+          if (!added) {
+            for (const c of ['isApproved', 'password']) {
+              if (!columnsToExclude.includes(c)) {
+                columnsToExclude.push(c);
+                added = true;
               }
             }
           }
         }
+
+        if (!added) break;
+
+        sanitized = getSanitizedItems(columnsToExclude);
+        const retryRes = await supabase.from(table).upsert(sanitized);
+        error = retryRes.error;
       }
 
       if (error) {
@@ -514,6 +525,7 @@ export class FleetStore {
       const cSuppliers = this.getChangedItems('suppliers', this.suppliers);
       const cFuelInflows = this.getChangedItems('fuelInflows', this.fuelInflows);
       const cFuelDispenses = this.getChangedItems('fuelDispenses', this.fuelDispenses);
+      const cLogistics = this.getChangedItems('logisticsSchedules', this.logisticsSchedules);
 
       // Sync only changed items
       if (cUsers.length) await this.syncTable('users', cUsers);
@@ -529,6 +541,7 @@ export class FleetStore {
 
       if (cTrips.length) await this.syncTable('trips', cTrips);
       if (cUsages.length) await this.syncTable('equipment_usages', cUsages);
+      if (cLogistics.length) await this.syncTable('logistics_schedules', cLogistics);
 
       // Sync maintenance logs
       await this.syncMaintenanceLogs();
@@ -1172,8 +1185,15 @@ export class FleetStore {
       status: 'active',
       workId: matchedWork?.id,
       workName: matchedWork?.name,
+      originCity: details.originCity || (matchedWork ? matchedWork.city : 'Palmas'),
+      originState: (details.originState || (matchedWork ? matchedWork.state : 'TO')).toUpperCase(),
+      destinationCity: details.destinationCity,
+      destinationState: details.destinationState ? details.destinationState.toUpperCase() : undefined,
       checkIn: {
         ...details,
+        originCity: details.originCity || (matchedWork ? matchedWork.city : 'Palmas'),
+        originState: (details.originState || (matchedWork ? matchedWork.state : 'TO')).toUpperCase(),
+        destinationState: details.destinationState ? details.destinationState.toUpperCase() : undefined,
         time: new Date().toISOString()
       },
       createdAt: new Date().toISOString()
@@ -2062,6 +2082,170 @@ export class FleetStore {
       if (error) console.warn('Supabase delete failed for fuel_dispenses:', error);
     });
     return { success: true, message: 'Abastecimento excluído com sucesso.' };
+  }
+
+  // ============================================================================
+  // CONTROLE DE LOGÍSTICA (PROGRAMAÇÃO DE VIAGENS, PERMANÊNCIAS E LOCAÇÃO)
+  // ============================================================================
+
+  public toggleVehicleLogisticsControl(vehicleId: string, enabled: boolean): { success: boolean; message: string } {
+    const vehicle = this.vehicles.find(v => v.id === vehicleId);
+    if (!vehicle) return { success: false, message: 'Veículo não encontrado.' };
+
+    this.vehicles = this.vehicles.map(v =>
+      v.id === vehicleId ? { ...v, hasLogisticsControl: enabled } : v
+    );
+    this.saveState();
+    return {
+      success: true,
+      message: enabled
+        ? `Controle de Logística ativado para ${vehicle.plate}.`
+        : `Controle de Logística desativado para ${vehicle.plate}.`
+    };
+  }
+
+  public addLogisticsSchedule(data: {
+    vehicleId: string;
+    allocationType?: LogisticsAllocationType;
+    scheduleStatus?: LogisticsScheduleStatus;
+    isThirdPartyRental: boolean;
+    thirdPartyName?: string;
+    workId?: string;
+    programDescription?: string;
+    originWorkId?: string;
+    originLabel?: string;
+    originCity?: string;
+    originState?: string;
+    destinationLabel: string;
+    destinationCity: string;
+    destinationState: string;
+    cargoDescription?: string;
+    startDate: string;
+    endDate: string;
+    driverId?: string;
+    notes?: string;
+  }): { success: boolean; message: string; schedule?: LogisticsSchedule } {
+    const vehicle = this.vehicles.find(v => v.id === data.vehicleId);
+    if (!vehicle) {
+      return { success: false, message: 'Veículo selecionado não encontrado.' };
+    }
+    if (!data.startDate || !data.endDate) {
+      return { success: false, message: 'Informe as datas inicial e final da programação.' };
+    }
+    if (data.endDate < data.startDate) {
+      return { success: false, message: 'A data final não pode ser anterior à data inicial.' };
+    }
+    if (!data.originLabel?.trim() || !data.originCity?.trim() || !data.originState?.trim()) {
+      return { success: false, message: 'Informe a origem (obra ou descrição livre), cidade e estado (UF).' };
+    }
+    if (!data.destinationLabel.trim() || !data.destinationCity.trim() || !data.destinationState.trim()) {
+      return { success: false, message: 'Informe o destino (obra ou destino livre), cidade e estado (UF).' };
+    }
+    if ((data.isThirdPartyRental || data.allocationType === 'terceiros') && !data.thirdPartyName?.trim()) {
+      return { success: false, message: 'Informe o nome do terceiro/cliente locatário.' };
+    }
+
+    const matchedOriginWork = data.originWorkId ? this.works.find(w => w.id === data.originWorkId) : undefined;
+    const matchedDestWork = data.workId ? this.works.find(w => w.id === data.workId) : undefined;
+    const matchedDriver = data.driverId ? this.users.find(u => u.id === data.driverId) : undefined;
+
+    const newSchedule: LogisticsSchedule = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      vehicleId: vehicle.id,
+      vehicleModelPlate: `${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
+      allocationType: data.allocationType || 'uso_programado',
+      scheduleStatus: data.scheduleStatus || 'programado',
+      isThirdPartyRental: Boolean(data.isThirdPartyRental || data.allocationType === 'terceiros'),
+      thirdPartyName: data.thirdPartyName?.trim() || undefined,
+      workId: matchedDestWork?.id,
+      workName: matchedDestWork?.name,
+      programDescription: matchedDestWork ? undefined : (data.programDescription?.trim() || undefined),
+      originWorkId: matchedOriginWork?.id,
+      originWorkName: matchedOriginWork?.name,
+      originLabel: matchedOriginWork ? matchedOriginWork.name : data.originLabel.trim(),
+      originCity: data.originCity.trim(),
+      originState: data.originState.trim().toUpperCase(),
+      destinationLabel: matchedDestWork ? matchedDestWork.name : data.destinationLabel.trim(),
+      destinationCity: data.destinationCity.trim(),
+      destinationState: data.destinationState.trim().toUpperCase(),
+      cargoDescription: data.cargoDescription?.trim() || undefined,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      driverId: matchedDriver?.id,
+      driverName: matchedDriver?.name,
+      notes: data.notes?.trim() || undefined,
+      createdBy: this.currentUser?.name,
+      createdAt: new Date().toISOString()
+    };
+
+    this.logisticsSchedules = [newSchedule, ...this.logisticsSchedules];
+    this.saveState();
+    return {
+      success: true,
+      message: `Programação logística registrada para ${vehicle.plate}!`,
+      schedule: newSchedule
+    };
+  }
+
+  public updateLogisticsSchedule(updated: LogisticsSchedule): { success: boolean; message: string } {
+    const exists = this.logisticsSchedules.some(s => s.id === updated.id);
+    if (!exists) return { success: false, message: 'Programação não encontrada.' };
+    if (updated.endDate < updated.startDate) {
+      return { success: false, message: 'A data final não pode ser anterior à data inicial.' };
+    }
+
+    const vehicle = this.vehicles.find(v => v.id === updated.vehicleId);
+    const matchedOriginWork = updated.originWorkId ? this.works.find(w => w.id === updated.originWorkId) : undefined;
+    const matchedDestWork = updated.workId ? this.works.find(w => w.id === updated.workId) : undefined;
+    const matchedDriver = updated.driverId ? this.users.find(u => u.id === updated.driverId) : undefined;
+
+    const sanitized: LogisticsSchedule = {
+      ...updated,
+      allocationType: updated.allocationType || 'uso_programado',
+      vehicleModelPlate: vehicle ? `${vehicle.brand} ${vehicle.model} (${vehicle.plate})` : updated.vehicleModelPlate,
+      isThirdPartyRental: Boolean(updated.isThirdPartyRental || updated.allocationType === 'terceiros'),
+      thirdPartyName: (updated.isThirdPartyRental || updated.allocationType === 'terceiros') ? updated.thirdPartyName?.trim() : undefined,
+      workId: matchedDestWork?.id,
+      workName: matchedDestWork?.name,
+      programDescription: matchedDestWork ? undefined : (updated.programDescription?.trim() || undefined),
+      originWorkId: matchedOriginWork?.id,
+      originWorkName: matchedOriginWork?.name,
+      originLabel: matchedOriginWork ? matchedOriginWork.name : (updated.originLabel?.trim() || ''),
+      originCity: updated.originCity?.trim() || '',
+      originState: (updated.originState || '').toUpperCase(),
+      destinationLabel: matchedDestWork ? matchedDestWork.name : updated.destinationLabel.trim(),
+      destinationCity: updated.destinationCity.trim(),
+      destinationState: updated.destinationState.toUpperCase(),
+      cargoDescription: updated.cargoDescription?.trim() || undefined,
+      driverName: matchedDriver?.name || (updated.driverId ? updated.driverName : undefined)
+    };
+
+    this.logisticsSchedules = this.logisticsSchedules.map(s => s.id === updated.id ? sanitized : s);
+    this.saveState();
+    return { success: true, message: 'Programação logística atualizada com sucesso!' };
+  }
+
+  public updateLogisticsScheduleStatus(id: string, scheduleStatus: LogisticsScheduleStatus): { success: boolean; message: string } {
+    const exists = this.logisticsSchedules.some(s => s.id === id);
+    if (!exists) return { success: false, message: 'Programação não encontrada.' };
+
+    this.logisticsSchedules = this.logisticsSchedules.map(s =>
+      s.id === id ? { ...s, scheduleStatus } : s
+    );
+    this.saveState();
+    return { success: true, message: 'Status atualizado com sucesso!' };
+  }
+
+  public deleteLogisticsSchedule(id: string): { success: boolean; message: string } {
+    const exists = this.logisticsSchedules.some(s => s.id === id);
+    if (!exists) return { success: false, message: 'Programação não encontrada.' };
+
+    this.logisticsSchedules = this.logisticsSchedules.filter(s => s.id !== id);
+    this.saveState();
+    supabase.from('logistics_schedules').delete().eq('id', id).then(({ error }) => {
+      if (error) console.warn('Supabase delete failed for logistics_schedules:', error);
+    });
+    return { success: true, message: 'Programação removida com sucesso.' };
   }
 }
 export default FleetStore;

@@ -16,7 +16,8 @@ import {
   CarFront,
   LayoutDashboard,
   Compass,
-  Tv
+  Tv,
+  CalendarRange
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -87,6 +88,15 @@ export function Sidebar({ currentUser, activeTab, setActiveTab, onLogout }: Side
       label: 'Dashboard Resumo',
       icon: LayoutDashboard,
       roleAllowed: (role) => role === 'gerencial' || role === 'admin',
+      section: 'gestao',
+    },
+    {
+      id: 'logistics',
+      htmlId: 'tab_logistics_btn',
+      mobileHtmlId: 'tab_logistics_mobile_btn',
+      label: 'Controle de Logística',
+      icon: CalendarRange,
+      roleAllowed: (role) => role !== 'abastecedor',
       section: 'gestao',
     },
     {

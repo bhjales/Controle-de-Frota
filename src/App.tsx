@@ -13,6 +13,7 @@ import { AdminEquipmentTypes } from './components/AdminEquipmentTypes';
 import { AdminSuppliers } from './components/AdminSuppliers';
 import { FuelManagement } from './components/FuelManagement';
 import { TvDashboard } from './components/TvDashboard';
+import { LogisticsControl } from './components/LogisticsControl';
 
 export default function App() {
   const store = FleetStore.getInstance();
@@ -30,6 +31,7 @@ export default function App() {
   const [suppliers, setSuppliers] = useState(store.suppliers);
   const [fuelInflows, setFuelInflows] = useState(store.fuelInflows);
   const [fuelDispenses, setFuelDispenses] = useState(store.fuelDispenses);
+  const [logisticsSchedules, setLogisticsSchedules] = useState(store.logisticsSchedules);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState('my-trips');
@@ -66,6 +68,7 @@ export default function App() {
       setSuppliers([...store.suppliers]);
       setFuelInflows([...store.fuelInflows]);
       setFuelDispenses([...store.fuelDispenses]);
+      setLogisticsSchedules([...store.logisticsSchedules]);
     });
     return () => unsubscribe();
   }, [store]);
@@ -207,6 +210,7 @@ export default function App() {
       case 'works': return 'Obras';
       case 'suppliers': return 'Fornecedores';
       case 'fuel': return 'Controle de Combustível';
+      case 'logistics': return 'Controle de Logística';
       default: return 'Painel Geral';
     }
   };
@@ -440,6 +444,18 @@ export default function App() {
                 fuelDispenses={fuelDispenses}
                 users={users}
                 store={store}
+              />
+            )}
+
+            {activeTab === 'logistics' && currentUser?.role !== 'abastecedor' && (
+              <LogisticsControl
+                currentUser={currentUser}
+                vehicles={vehicles}
+                works={works}
+                users={users}
+                schedules={logisticsSchedules}
+                store={store}
+                onNavigateToVehicles={() => setActiveTab('vehicles')}
               />
             )}
 

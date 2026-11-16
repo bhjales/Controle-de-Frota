@@ -9,6 +9,7 @@ import {
   CheckCircle2, 
   Clock, 
   MapPin, 
+  Navigation,
   User, 
   Activity, 
   ShieldAlert,
@@ -518,7 +519,21 @@ export function TvDashboard({
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-300">
                       <MapPin className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="truncate">Destino: <strong className="text-white">{trip.checkIn.destination}</strong></span>
+                      <span className="truncate">
+                        Destino: <strong className="text-white">{trip.checkIn.destination}</strong>
+                        {(trip.destinationCity || trip.checkIn.destinationCity) && (
+                          <span className="text-amber-300 font-semibold ml-1">
+                            ({trip.destinationCity || trip.checkIn.destinationCity}
+                            {(trip.destinationState || trip.checkIn.destinationState) ? `/${trip.destinationState || trip.checkIn.destinationState}` : ''})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                      <Navigation className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span className="truncate">
+                        Origem: {trip.checkIn.origin || 'Escritório Central'} ({trip.originCity || trip.checkIn.originCity || 'Palmas'}/{(trip.originState || trip.checkIn.originState || 'TO')})
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-400">
                       <Building2 className="w-4 h-4 text-blue-400 shrink-0" />
