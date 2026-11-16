@@ -572,8 +572,8 @@ function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
 
     if (!mapInstanceRef.current) {
       const map = L.map(mapRef.current, {
-        center: [-23.5505, -46.6333],
-        zoom: 7,
+        center: [-10.184, -48.3336],
+        zoom: 6,
         zoomControl: true,
       });
 
@@ -593,8 +593,8 @@ function LeafletRouteMap({ works }: { works: ConstructionWork[] }) {
       }
     });
 
-    const hqCoord: [number, number] = [-23.5505, -46.6333];
-    L.marker(hqCoord).addTo(map).bindPopup('<b>Base / Sede Central da Frota</b>');
+    const hqCoord: [number, number] = [-10.184, -48.3336];
+    L.marker(hqCoord).addTo(map).bindPopup('<b>Escritório Central - Palmas/TO</b>');
 
     let isMounted = true;
 
