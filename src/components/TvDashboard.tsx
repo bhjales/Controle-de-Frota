@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { LeafletRouteMap } from './LeafletRouteMap';
 import { TvWorkFleetUnifiedView } from './TvWorkFleetUnifiedView';
+import { TvMaintenanceSlide } from './TvMaintenanceSlide';
 import { exportLogisticsCSV, exportLogisticsPDF } from '../utils/logisticsReports';
 import {
   Vehicle,
@@ -78,6 +79,23 @@ function formatDateISO(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+const SCHEDULE_COLOR_PALETTE = [
+  { chip: 'bg-blue-600/30 text-blue-100 border-blue-400/75', dot: 'bg-blue-400' },
+  { chip: 'bg-emerald-600/30 text-emerald-100 border-emerald-400/75', dot: 'bg-emerald-400' },
+  { chip: 'bg-amber-600/30 text-amber-100 border-amber-400/75', dot: 'bg-amber-400' },
+  { chip: 'bg-violet-600/30 text-violet-100 border-violet-400/75', dot: 'bg-violet-400' },
+  { chip: 'bg-rose-600/30 text-rose-100 border-rose-400/75', dot: 'bg-rose-400' },
+  { chip: 'bg-cyan-600/30 text-cyan-100 border-cyan-400/75', dot: 'bg-cyan-400' },
+  { chip: 'bg-orange-600/30 text-orange-100 border-orange-400/75', dot: 'bg-orange-400' },
+  { chip: 'bg-fuchsia-600/30 text-fuchsia-100 border-fuchsia-400/75', dot: 'bg-fuchsia-400' },
+  { chip: 'bg-lime-600/30 text-lime-100 border-lime-400/75', dot: 'bg-lime-400' },
+  { chip: 'bg-indigo-600/30 text-indigo-100 border-indigo-400/75', dot: 'bg-indigo-400' },
+  { chip: 'bg-teal-600/30 text-teal-100 border-teal-400/75', dot: 'bg-teal-400' },
+  { chip: 'bg-pink-600/30 text-pink-100 border-pink-400/75', dot: 'bg-pink-400' },
+  { chip: 'bg-yellow-600/30 text-yellow-100 border-yellow-400/75', dot: 'bg-yellow-400' },
+  { chip: 'bg-sky-600/30 text-sky-100 border-sky-400/75', dot: 'bg-sky-400' }
+];
+
 export function TvDashboard({
   vehicles,
   equipments,
@@ -98,6 +116,7 @@ export function TvDashboard({
     { title: 'Calendário Mensal de Logística (Mês Atual)', shortLabel: 'Calendário Logística' },
     { title: 'Visão Unificada — Veículos Ativos e Maquinários por Obra', shortLabel: 'Veículos & Maquinários' },
     { title: 'Mapa de Rotas e Itinerários por Cidades (Obras)', shortLabel: 'Mapa de Rotas' },
+    { title: 'Central de Manutenções — Oficina, Preventivas e Histórico', shortLabel: 'Manutenções' },
     { title: 'Quadro Financeiro de Custos — Obras Ativas', shortLabel: 'Custos (R$)' },
     { title: 'Quadro de Combustível — Tanques e Consumo', shortLabel: 'Combustível (L)' },
     { title: 'Frota em Trânsito / Viagens Ativas', shortLabel: 'Frota em Trânsito' }
@@ -285,18 +304,13 @@ export function TvDashboard({
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
   }, [logisticsSchedules, monthStartStr, monthEndStr]);
 
-  const getScheduleDarkStyle = (item: LogisticsSchedule) => {
-    if (item.scheduleStatus === 'concluido') {
-      return 'bg-slate-800/90 text-slate-300 border-slate-700';
-    }
-    if (item.scheduleStatus === 'em_andamento') {
-      return 'bg-emerald-950/80 text-emerald-200 border-emerald-500/50';
-    }
-    if (item.isThirdPartyRental || item.allocationType === 'terceiros') {
-      return 'bg-purple-950/80 text-purple-200 border-purple-500/50';
-    }
-    return 'bg-blue-950/80 text-blue-200 border-blue-500/50';
-  };
+  const scheduleColorMap = useMemo(() => {
+    const map = new Map<string, { chip: string; dot: string }>();
+    monthLogisticsSchedules.forEach((sched, idx) => {
+      map.set(sched.id, SCHEDULE_COLOR_PALETTE[idx % SCHEDULE_COLOR_PALETTE.length]);
+    });
+    return map;
+  }, [monthLogisticsSchedules]);
 
   return (
     <div
@@ -725,8 +739,12 @@ export function TvDashboard({
                   const daySchedules = monthLogisticsSchedules.filter(
                     s => s.startDate <= d.iso && s.endDate >= d.iso
                   );
-                  const visibleSchedules = daySchedules.slice(0, 2);
-                  const extraCount = daySchedules.length - visibleSchedules.length;
+                  const gridLayoutClass =
+                    daySchedules.length >= 7
+                      ? 'grid grid-cols-3 gap-0.5 content-start'
+                      : daySchedules.length >= 4
+                      ? 'grid grid-cols-2 gap-0.5 content-start'
+                      : 'flex flex-col gap-0.5';
 
                   return (
                     <div
@@ -754,35 +772,35 @@ export function TvDashboard({
                         )}
                       </div>
 
-                      <div className="flex-1 min-h-0 flex flex-col gap-0.5 overflow-hidden">
-                        {visibleSchedules.map(item => {
+                      <div className={`flex-1 min-h-0 ${gridLayoutClass}`}>
+                        {daySchedules.map(item => {
                           const plate =
                             item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
+                          const colorStyle =
+                            scheduleColorMap.get(item.id) || SCHEDULE_COLOR_PALETTE[0];
+                          const destText = item.isThirdPartyRental
+                            ? item.thirdPartyName || item.destinationCity
+                            : item.workName || item.destinationCity;
                           return (
                             <div
                               key={item.id}
-                              className={`px-1 py-0.5 rounded border text-[9px] leading-tight truncate ${getScheduleDarkStyle(
-                                item
-                              )}`}
+                              className={`px-1 py-[1px] rounded border leading-[1.2] flex items-center gap-1 min-w-0 ${
+                                daySchedules.length >= 7 ? 'text-[7.5px]' : 'text-[8.5px]'
+                              } ${colorStyle.chip}`}
                               title={`${plate} | ${item.destinationLabel} (${item.destinationCity}/${item.destinationState})${
                                 item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''
                               }`}
                             >
-                              <span className="font-mono font-bold">{plate}</span>
-                              {' · '}
-                              <span>
-                                {item.isThirdPartyRental
-                                  ? item.thirdPartyName || item.destinationCity
-                                  : item.workName || item.destinationCity}
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${colorStyle.dot}`}
+                              />
+                              <span className="truncate">
+                                <span className="font-mono font-bold">{plate}</span>
+                                {daySchedules.length < 7 && destText ? ` · ${destText}` : ''}
                               </span>
                             </div>
                           );
                         })}
-                        {extraCount > 0 && (
-                          <div className="text-[8.5px] font-mono text-slate-400 px-1 truncate">
-                            +{extraCount} mais
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -796,27 +814,37 @@ export function TvDashboard({
               </div>
             </div>
 
-            <div className="shrink-0 flex flex-wrap items-center gap-4 text-[10px] text-slate-400 font-mono">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded bg-blue-950 border border-blue-500/50 inline-block" />
-                Uso Programado (Obra / Destino)
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded bg-emerald-950 border border-emerald-500/50 inline-block" />
-                Em Andamento
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded bg-purple-950 border border-purple-500/50 inline-block" />
-                Locado para Terceiros
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded bg-slate-800 border border-slate-700 inline-block" />
-                Concluído
-              </span>
+            {/* Legenda individual de todas as programações do mês por cor */}
+            <div className="shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300 font-mono">
+              {monthLogisticsSchedules.length === 0 ? (
+                <span className="text-slate-500">Nenhuma programação ativa neste mês.</span>
+              ) : (
+                monthLogisticsSchedules.map(item => {
+                  const plate =
+                    item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
+                  const colorStyle =
+                    scheduleColorMap.get(item.id) || SCHEDULE_COLOR_PALETTE[0];
+                  return (
+                    <span
+                      key={item.id}
+                      className="inline-flex items-center gap-1.5 max-w-[240px]"
+                      title={`${item.vehicleModelPlate} -> ${item.destinationLabel} (${item.startDate} até ${item.endDate})`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-xs shrink-0 ${colorStyle.dot}`} />
+                      <span className="truncate">
+                        <strong className="text-white">{plate}</strong> ·{' '}
+                        {item.isThirdPartyRental
+                          ? item.thirdPartyName || item.destinationLabel
+                          : item.workName || item.destinationLabel}
+                      </span>
+                    </span>
+                  );
+                })
+              )}
               {monthLogisticsSchedules.some(s => Boolean(s.cargoDescription)) && (
-                <span className="flex items-center gap-1 ml-auto text-slate-400">
+                <span className="flex items-center gap-1 ml-auto text-slate-400 shrink-0">
                   <Package className="w-3 h-3" />
-                  Passe o cursor no item para detalhes completos
+                  Cores individuais por programação
                 </span>
               )}
             </div>
@@ -948,8 +976,13 @@ export function TvDashboard({
           </div>
         )}
 
-        {/* SLIDE 4: QUADRO DE CUSTOS (COMPACTO 1 TELA) */}
+        {/* SLIDE 4: CENTRAL DE MANUTENÇÕES */}
         {currentSlide === 4 && (
+          <TvMaintenanceSlide vehicles={vehicles} equipments={equipments} />
+        )}
+
+        {/* SLIDE 5: QUADRO DE CUSTOS (COMPACTO 1 TELA) */}
+        {currentSlide === 5 && (
           <div className="flex-1 min-h-0 bg-[#0F172A] border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col gap-2.5 overflow-hidden animate-fade-in">
             <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1105,8 +1138,8 @@ export function TvDashboard({
           </div>
         )}
 
-        {/* SLIDE 5: QUADRO DE COMBUSTÍVEL (COMPACTO 1 TELA) */}
-        {currentSlide === 5 && (
+        {/* SLIDE 6: QUADRO DE COMBUSTÍVEL (COMPACTO 1 TELA) */}
+        {currentSlide === 6 && (
           <div className="flex-1 min-h-0 bg-[#0F172A] border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col gap-2.5 overflow-hidden animate-fade-in">
             <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1235,8 +1268,8 @@ export function TvDashboard({
           </div>
         )}
 
-        {/* SLIDE 6: FROTA EM TRÂNSITO / VIAGENS ATIVAS */}
-        {currentSlide === 6 && (
+        {/* SLIDE 7: FROTA EM TRÂNSITO / VIAGENS ATIVAS */}
+        {currentSlide === 7 && (
           <div className="flex-1 min-h-0 bg-[#0F172A] border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col gap-2.5 overflow-hidden animate-fade-in">
             <div className="shrink-0 flex items-center justify-between border-b border-slate-800 pb-2">
               <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2 font-display">
