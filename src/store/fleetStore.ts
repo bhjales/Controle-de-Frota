@@ -368,8 +368,11 @@ export class FleetStore {
         });
       };
 
-      const sanitized = getSanitizedItems([]);
-      const { error } = await supabase.from(table).upsert(sanitized);
+      let sanitized = getSanitizedItems([]);
+      let { error } =
+        table === 'vehicles'
+          ? await this.upsertVehicleWithColumnFallback(sanitized, false)
+          : await supabase.from(table).upsert(sanitized);
 
       if (error) {
         this.lastSyncError = `[${table}] ${error.message}`;
@@ -383,7 +386,7 @@ export class FleetStore {
         if (error.message && error.message.includes('Failed to fetch')) {
           console.warn(`[Supabase Offline/Blocked] Falha ao sincronizar ${table}.`);
         } else if (isSchemaWarning) {
-          console.warn(`[Supabase Schema] Tabela '${table}' rejeitou envio sem omitir colunas: ${error.message}. Verifique 'supabase-schema.sql'.`);
+          console.warn(`[Supabase Schema] Tabela '${table}' rejeitou envio: ${error.message}. Verifique 'supabase-schema.sql'.`);
         } else {
           console.error(`Error syncing ${table}:`, error.message);
         }
@@ -767,6 +770,53 @@ export class FleetStore {
     };
   }
 
+  private async upsertVehicleWithColumnFallback(
+    payloads: Record<string, any>[],
+    requireLogisticsColumn: boolean
+  ): Promise<{ error: any; excludedColumns: string[] }> {
+    const excludedColumns: string[] = [];
+    let currentPayloads = payloads.map(p => ({ ...p }));
+    let { error } = await supabase.from('vehicles').upsert(currentPayloads);
+
+    let attempts = 0;
+    while (error && attempts < 6) {
+      attempts++;
+      const msg = error.message || '';
+      const match = msg.match(/Could not find the '([^']+)' column/i);
+      const missingCol = match?.[1];
+
+      if (!missingCol || excludedColumns.includes(missingCol)) {
+        break;
+      }
+
+      if (missingCol === 'hasLogisticsControl' && requireLogisticsColumn) {
+        break;
+      }
+
+      const safeOptionalCols = ['isActive', 'tankCapacityLiters', 'hasLogisticsControl'];
+      if (!safeOptionalCols.includes(missingCol)) {
+        break;
+      }
+
+      excludedColumns.push(missingCol);
+      currentPayloads = currentPayloads.map(p => {
+        const copy = { ...p };
+        delete copy[missingCol];
+        return copy;
+      });
+      const retry = await supabase.from('vehicles').upsert(currentPayloads);
+      error = retry.error;
+    }
+
+    if (excludedColumns.length > 0 && !error) {
+      console.warn(
+        `[Supabase] Veículo salvo em 'public.vehicles' omitindo colunas ainda não criadas no banco: ${excludedColumns.join(', ')}.`
+      );
+    }
+
+    return { error, excludedColumns };
+  }
+
   public async addVehicle(vehicleData: Omit<Vehicle, 'id' | 'createdAt' | 'status'>): Promise<{ success: boolean; synced: boolean; message: string }> {
     const plateUpper = vehicleData.plate.trim().toUpperCase();
     if (this.vehicles.some(v => v.plate.toUpperCase() === plateUpper)) {
@@ -789,7 +839,10 @@ export class FleetStore {
 
     try {
       const payload = this.sanitizeVehicleForSupabase(newVehicle);
-      const { error } = await supabase.from('vehicles').upsert(payload);
+      const { error, excludedColumns } = await this.upsertVehicleWithColumnFallback(
+        [payload],
+        Boolean(newVehicle.hasLogisticsControl)
+      );
       if (error) {
         console.warn('Supabase addVehicle error:', error.message);
         return {
@@ -798,7 +851,14 @@ export class FleetStore {
           message: `Veículo cadastrado localmente, mas falhou ao salvar no Supabase: ${error.message}`
         };
       }
-      this.updatePreviousState();
+      this.updatePreviousState('vehicles');
+      if (excludedColumns.length > 0) {
+        return {
+          success: true,
+          synced: true,
+          message: `Veículo cadastrado no Supabase! (Obs.: adicione as colunas ${excludedColumns.join(', ')} em public.vehicles quando desejar usá-las.)`
+        };
+      }
       return { success: true, synced: true, message: 'Veículo cadastrado e sincronizado no Supabase com sucesso!' };
     } catch (e: any) {
       return {
@@ -821,7 +881,10 @@ export class FleetStore {
 
     try {
       const payload = this.sanitizeVehicleForSupabase(normalized);
-      const { error } = await supabase.from('vehicles').upsert(payload);
+      const { error, excludedColumns } = await this.upsertVehicleWithColumnFallback(
+        [payload],
+        Boolean(normalized.hasLogisticsControl)
+      );
       if (error) {
         console.warn('Supabase updateVehicle error:', error.message);
         return {
@@ -830,7 +893,14 @@ export class FleetStore {
           message: `Falha ao atualizar veículo no Supabase (${normalized.plate}): ${error.message}`
         };
       }
-      this.updatePreviousState();
+      this.updatePreviousState('vehicles');
+      if (excludedColumns.length > 0) {
+        return {
+          success: true,
+          synced: true,
+          message: `Veículo atualizado no Supabase! (Colunas ausentes no banco: ${excludedColumns.join(', ')}.)`
+        };
+      }
       return { success: true, synced: true, message: 'Veículo atualizado no Supabase com sucesso!' };
     } catch (e: any) {
       return {
