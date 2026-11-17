@@ -156,7 +156,10 @@ export class FleetStore {
       ]);
 
       if (users !== null) {
-        this.users = users as User[];
+        this.users = (users as User[]).map(u => ({
+          ...u,
+          authorizedAssetIds: Array.isArray(u.authorizedAssetIds) ? u.authorizedAssetIds : []
+        }));
         if (!this.users.some(u => u.loginId === 'admin' || u.role === 'admin')) {
           this.users.unshift({
             id: 'user-admin-default',
@@ -169,7 +172,7 @@ export class FleetStore {
             isActive: true,
             password: '123456',
             isApproved: true,
-            createdAt: new Date().toISOString()
+            createdAt: '2025-01-01T00:00:00.000Z'
           });
         }
         if (!this.users.some(u => u.loginId === 'abastecedor' || u.role === 'abastecedor')) {
@@ -184,7 +187,7 @@ export class FleetStore {
             isActive: true,
             password: '123456',
             isApproved: true,
-            createdAt: new Date().toISOString()
+            createdAt: '2025-01-01T00:00:00.000Z'
           });
         }
         if (this.currentUser) {
@@ -304,6 +307,14 @@ export class FleetStore {
             return copy;
           }
 
+          if (table === 'users') {
+            const copy: Record<string, any> = this.sanitizeUserForSupabase(item as User);
+            for (const col of colsToExclude) {
+              delete copy[col];
+            }
+            return copy;
+          }
+
           const copy = { ...item };
           if (table === 'equipments') {
             delete copy.maintenanceHistory;
@@ -376,6 +387,8 @@ export class FleetStore {
 
       if (error) {
         this.lastSyncError = `[${table}] ${error.message}`;
+        const isRoleConstraintError =
+          table === 'users' && error.message && error.message.includes('users_role_check');
         const isSchemaWarning = error.message && (
           error.message.includes('schema cache') || 
           error.message.includes('relation') || 
@@ -383,7 +396,11 @@ export class FleetStore {
           error.message.includes('column')
         );
 
-        if (error.message && error.message.includes('Failed to fetch')) {
+        if (isRoleConstraintError) {
+          console.warn(
+            `[Supabase Schema] Tabela 'users' rejeitou o perfil selecionado pela constraint "users_role_check". Execute o bloco de atualização da tabela 'users' em 'supabase-schema.sql' no Supabase SQL Editor para liberar o perfil 'abastecedor'.`
+          );
+        } else if (error.message && error.message.includes('Failed to fetch')) {
           console.warn(`[Supabase Offline/Blocked] Falha ao sincronizar ${table}.`);
         } else if (isSchemaWarning) {
           console.warn(`[Supabase Schema] Tabela '${table}' rejeitou envio: ${error.message}. Verifique 'supabase-schema.sql'.`);
@@ -435,7 +452,9 @@ export class FleetStore {
     }
     this.isSyncing = true;
     try {
-      const cUsers = this.getChangedItems('users', this.users);
+      const cUsers = this.getChangedItems('users', this.users).filter(
+        u => u.id !== 'user-admin-default' && u.id !== 'user-abastecedor-demo'
+      );
       const cWorks = this.getChangedItems('works', this.works);
       const cEqTypes = this.getChangedItems('equipmentTypes', this.equipmentTypes);
       const cVehCats = this.getChangedItems('vehicleCategories', this.vehicleCategories);
@@ -617,7 +636,10 @@ export class FleetStore {
     try {
       const { data, error } = await supabase.from('users').select('*');
       if (!error && data) {
-        this.users = data as User[];
+        this.users = (data as User[]).map(u => ({
+          ...u,
+          authorizedAssetIds: Array.isArray(u.authorizedAssetIds) ? u.authorizedAssetIds : []
+        }));
         if (!this.users.some(u => u.loginId === 'admin' || u.role === 'admin')) {
           this.users.unshift({
             id: 'user-admin-default',
@@ -630,7 +652,7 @@ export class FleetStore {
             isActive: true,
             password: '123456',
             isApproved: true,
-            createdAt: new Date().toISOString()
+            createdAt: '2025-01-01T00:00:00.000Z'
           });
         }
         if (!this.users.some(u => u.loginId === 'abastecedor' || u.role === 'abastecedor')) {
@@ -645,9 +667,10 @@ export class FleetStore {
             isActive: true,
             password: '123456',
             isApproved: true,
-            createdAt: new Date().toISOString()
+            createdAt: '2025-01-01T00:00:00.000Z'
           });
         }
+        this.updatePreviousState('users');
       }
     } catch (e) {
       console.warn('Falha ao consultar usuários no Supabase durante login:', e);
@@ -717,6 +740,26 @@ export class FleetStore {
   public logout() {
     this.currentUser = null;
     this.triggerListeners();
+  }
+
+  private sanitizeUserForSupabase(user: User) {
+    const validRoles: UserRole[] = ['admin', 'driver', 'gerencial', 'abastecedor'];
+    const normalizedRole: UserRole = validRoles.includes(user.role) ? user.role : 'driver';
+
+    return {
+      id: String(user.id).trim(),
+      loginId: user.loginId ? String(user.loginId).trim().toLowerCase() : null,
+      name: String(user.name || '').trim(),
+      email: user.email ? String(user.email).trim() : null,
+      cpf: user.cpf ? String(user.cpf).trim() : null,
+      licenseNumber: user.licenseNumber ? String(user.licenseNumber).trim() : null,
+      role: normalizedRole,
+      isActive: user.isActive !== false,
+      password: user.password || '123456',
+      isApproved: user.isApproved !== false,
+      authorizedAssetIds: Array.isArray(user.authorizedAssetIds) ? user.authorizedAssetIds : [],
+      createdAt: user.createdAt || new Date().toISOString(),
+    };
   }
 
   private sanitizeVehicleForSupabase(vehicle: Vehicle) {

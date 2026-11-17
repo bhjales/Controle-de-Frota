@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Truck, Shield, Key, FileCheck, Check, AlertCircle, HelpCircle, UserCheck } from 'lucide-react';
 import { FleetStore } from './store/fleetStore';
 import { Sidebar } from './components/Sidebar';
@@ -74,18 +74,45 @@ export default function App() {
     return () => unsubscribe();
   }, [store]);
 
-  // Set correct active view tab on loading / change session
+  const lastSessionUserIdRef = useRef<string | null>(null);
+
+  // Set correct active view tab only on session change (login/logout) or if current tab becomes unauthorized
   useEffect(() => {
-    if (currentUser) {
+    if (!currentUser) {
+      lastSessionUserIdRef.current = null;
+      return;
+    }
+
+    const isNewSession = lastSessionUserIdRef.current !== currentUser.id;
+    if (isNewSession) {
+      lastSessionUserIdRef.current = currentUser.id;
       if (currentUser.role === 'abastecedor') {
         setActiveTab('fuel');
       } else if (currentUser.role === 'gerencial') {
         setActiveTab('manager-dashboard');
-      } else if (currentUser.role === 'admin' && activeTab === 'my-trips') {
+      } else if (currentUser.role === 'admin') {
         setActiveTab('drivers');
+      } else {
+        setActiveTab('my-trips');
       }
+      return;
     }
-  }, [currentUser]);
+
+    // If the user's role changed dynamically while logged in and current tab is forbidden, redirect safely
+    if (currentUser.role === 'abastecedor' && activeTab !== 'fuel' && activeTab !== 'tv-dashboard') {
+      setActiveTab('fuel');
+    } else if (
+      currentUser.role === 'gerencial' &&
+      ['my-trips', 'equipments', 'vehicles', 'drivers', 'categories'].includes(activeTab)
+    ) {
+      setActiveTab('manager-dashboard');
+    } else if (
+      currentUser.role === 'driver' &&
+      ['vehicles', 'drivers', 'categories', 'works', 'suppliers', 'fuel', 'manager-dashboard'].includes(activeTab)
+    ) {
+      setActiveTab('my-trips');
+    }
+  }, [currentUser, activeTab]);
 
   // Refresh fresh DB data when switching tabs
   useEffect(() => {
@@ -224,6 +251,7 @@ export default function App() {
       case 'suppliers': return 'Fornecedores';
       case 'fuel': return 'Controle de Combustível';
       case 'logistics': return 'Controle de Logística';
+      case 'tv-dashboard': return 'Painel TV (Geral)';
       default: return 'Painel Geral';
     }
   };
@@ -444,6 +472,7 @@ export default function App() {
                 works={works}
                 fuelInflows={fuelInflows}
                 fuelDispenses={fuelDispenses}
+                logisticsSchedules={logisticsSchedules}
                 store={store}
               />
             )}
@@ -477,7 +506,7 @@ export default function App() {
             {(((activeTab === 'vehicles' || activeTab === 'drivers' || activeTab === 'categories') && currentUser.role !== 'admin') ||
               ((activeTab === 'suppliers' || activeTab === 'fuel' || activeTab === 'works') && currentUser.role === 'driver') ||
               ((activeTab === 'my-trips' || activeTab === 'equipments') && currentUser.role === 'gerencial') ||
-              (currentUser.role === 'abastecedor' && activeTab !== 'fuel')) && (
+              (currentUser.role === 'abastecedor' && activeTab !== 'fuel' && activeTab !== 'tv-dashboard')) && (
               <div className="p-8 bg-red-50 border border-red-200 text-red-800 rounded-3xl text-center space-y-2 animate-bounce">
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
                 <h4 className="text-base font-bold">Acesso Restrito</h4>

@@ -45,12 +45,15 @@ CREATE TABLE IF NOT EXISTS public.users (
     email TEXT,
     cpf TEXT,
     "licenseNumber" TEXT,
-    role TEXT, -- 'admin', 'driver', 'gerencial'
+    role TEXT DEFAULT 'driver', -- 'admin', 'driver', 'gerencial', 'abastecedor'
     "isActive" BOOLEAN DEFAULT true,
     password TEXT,
     "isApproved" BOOLEAN DEFAULT true,
     "authorizedAssetIds" JSONB DEFAULT '[]'::jsonb,
-    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CONSTRAINT users_role_check CHECK (
+        role IS NULL OR role = ANY (ARRAY['admin'::text, 'driver'::text, 'gerencial'::text, 'abastecedor'::text])
+    )
 );
 
 -- ------------------------------------------------------------------------------
@@ -284,6 +287,10 @@ ALTER TABLE public.users ADD COLUMN IF NOT EXISTS "loginId" TEXT;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS "isApproved" BOOLEAN DEFAULT true;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS "authorizedAssetIds" JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password TEXT;
+ALTER TABLE public.users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE public.users ADD CONSTRAINT users_role_check CHECK (
+    role IS NULL OR role = ANY (ARRAY['admin'::text, 'driver'::text, 'gerencial'::text, 'abastecedor'::text])
+);
 
 -- Atualização na tabela vehicles
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS category TEXT;
