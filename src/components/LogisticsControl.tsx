@@ -12,7 +12,9 @@ import {
   List,
   Columns,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 import {
   Vehicle,
@@ -23,6 +25,7 @@ import {
   LogisticsScheduleStatus
 } from '../types';
 import { FleetStore } from '../store/fleetStore';
+import { exportLogisticsCSV, exportLogisticsPDF } from '../utils/logisticsReports';
 
 interface LogisticsControlProps {
   currentUser: User | null;
@@ -595,6 +598,51 @@ export function LogisticsControl({
     }
   };
 
+  const buildExportScopeDescription = () => {
+    const parts: string[] = [];
+    if (filterVehicleId !== 'all') {
+      const veh = vehicles.find(v => v.id === filterVehicleId);
+      parts.push(`Veículo: ${veh ? `${veh.plate} (${veh.model})` : filterVehicleId}`);
+    }
+    if (filterLinkType === 'obra') parts.push('Vínculo: Somente Obras');
+    if (filterLinkType === 'livre') parts.push('Vínculo: Destinos Livres');
+    if (filterRental === 'rented') parts.push('Locação: Terceiros');
+    if (filterRental === 'own') parts.push('Locação: Uso Próprio');
+    if (filterStatus !== 'all') {
+      parts.push(`Status: ${STATUS_LABELS[filterStatus as LogisticsScheduleStatus] || filterStatus}`);
+    }
+    if (searchQuery.trim()) parts.push(`Busca: "${searchQuery.trim()}"`);
+    return parts.length > 0 ? parts.join(' • ') : `Visão Geral (${MONTH_NAMES[month]} ${year} e todas as agendas)`;
+  };
+
+  const handleExportLogisticsCSV = () => {
+    exportLogisticsCSV({
+      schedules: filteredSchedules,
+      works,
+      vehicles,
+      currentUser,
+      monthYearLabel: `${MONTH_NAMES[month]} de ${year}`,
+      monthStartStr,
+      monthEndStr,
+      scopeDescription: buildExportScopeDescription(),
+    });
+    setFeedbackMsg(`Planilha CSV do Calendário de Logística exportada (${filteredSchedules.length} registros).`);
+  };
+
+  const handleExportLogisticsPDF = () => {
+    exportLogisticsPDF({
+      schedules: filteredSchedules,
+      works,
+      vehicles,
+      currentUser,
+      monthYearLabel: `${MONTH_NAMES[month]} de ${year}`,
+      monthStartStr,
+      monthEndStr,
+      scopeDescription: buildExportScopeDescription(),
+    });
+    setFeedbackMsg(`Relatório PDF do Calendário de Logística gerado (${filteredSchedules.length} registros).`);
+  };
+
   return (
     <div id="logistics_control_view" className="space-y-6">
       {/* Header Section */}
@@ -614,6 +662,27 @@ export function LogisticsControl({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            id="export_logistics_csv_btn"
+            onClick={handleExportLogisticsCSV}
+            disabled={filteredSchedules.length === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-40 disabled:pointer-events-none border border-emerald-200 rounded-xl transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            title="Baixar planilha CSV legível para Excel/LibreOffice (modo offline)"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Exportar CSV
+          </button>
+          <button
+            type="button"
+            id="export_logistics_pdf_btn"
+            onClick={handleExportLogisticsPDF}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            title="Gerar PDF executivo com agenda diária, obras e viagens programadas (modo offline)"
+          >
+            <FileText className="w-4 h-4" />
+            Exportar PDF
+          </button>
           {canManage && (
             <button
               type="button"

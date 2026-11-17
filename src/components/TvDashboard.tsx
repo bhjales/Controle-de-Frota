@@ -20,8 +20,13 @@ import {
   CalendarRange,
   Wrench,
   Package,
-  Layers
+  Layers,
+  Compass,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
+import { LeafletRouteMap } from './LeafletRouteMap';
+import { exportLogisticsCSV, exportLogisticsPDF } from '../utils/logisticsReports';
 import {
   Vehicle,
   Equipment,
@@ -87,15 +92,17 @@ export function TvDashboard({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoplay, setIsAutoplay] = useState(true);
 
-  const slideTitles = [
-    'QTD de Frotas & Visão Geral',
-    'Calendário Mensal de Logística (Mês Atual)',
-    'Quadro de Obras — Veículos por Obra',
-    'Quadro de Custos — Obras Ativas',
-    'Quadro de Combustível — Tanques e Consumo',
-    'Frota em Trânsito / Viagens Ativas'
+  const slides = [
+    { title: 'QTD de Frotas & Visão Geral', shortLabel: 'QTD Frotas' },
+    { title: 'Calendário Mensal de Logística (Mês Atual)', shortLabel: 'Calendário Logística' },
+    { title: 'Quadro de Obras — Veículos por Obra', shortLabel: 'Veículos por Obra' },
+    { title: 'Mapa de Rotas e Itinerários por Cidades (Obras)', shortLabel: 'Mapa de Rotas' },
+    { title: 'Quadro de Custos — Obras Ativas', shortLabel: 'Custos (R$)' },
+    { title: 'Quadro de Combustível — Tanques e Consumo', shortLabel: 'Combustível (L)' },
+    { title: 'Frota em Trânsito / Viagens Ativas', shortLabel: 'Frota em Trânsito' }
   ];
-  const totalSlides = slideTitles.length;
+  const slideTitles = slides.map(s => s.title);
+  const totalSlides = slides.length;
 
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -239,6 +246,10 @@ export function TvDashboard({
     0
   );
   const totalGeneralMaintCost = workMaintenanceCosts.get('geral') || 0;
+  const totalKmDriven = useMemo(
+    () => trips.reduce((acc, t) => acc + (Number(t.kmDriven) || 0), 0),
+    [trips]
+  );
 
   // Current Month Calendar Math (always reflects current month from live clock)
   const currentYear = currentTime.getFullYear();
@@ -325,17 +336,17 @@ export function TvDashboard({
   return (
     <div
       ref={containerRef}
-      className={`space-y-6 transition-all duration-300 ${
+      className={`space-y-4 transition-all duration-300 ${
         isFullscreen
-          ? 'fixed inset-0 z-[9999] bg-[#070B14] p-6 sm:p-8 overflow-y-auto text-white w-screen h-screen'
+          ? 'fixed inset-0 z-[9999] bg-[#070B14] p-4 sm:p-6 overflow-y-auto text-white w-screen h-screen'
           : 'w-full'
       }`}
     >
       {/* TV Header Bar */}
-      <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-2xl">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-blue-600/20 border border-blue-500/40 rounded-2xl text-blue-400 animate-pulse">
-            <Tv className="w-8 h-8" />
+      <div className="bg-[#0F172A] border border-slate-800 rounded-2xl px-5 py-4 flex flex-col md:flex-row items-center justify-between gap-3 shadow-2xl">
+        <div className="flex items-center gap-3.5">
+          <div className="p-2.5 bg-blue-600/20 border border-blue-500/40 rounded-xl text-blue-400 animate-pulse">
+            <Tv className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -400,21 +411,21 @@ export function TvDashboard({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {slideTitles.map((title, idx) => (
+          {slides.map((slide, idx) => (
             <button
-              key={title}
+              key={slide.title}
               onClick={() => {
                 setCurrentSlide(idx);
                 setIsAutoplay(false);
               }}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
                 currentSlide === idx
-                  ? 'bg-blue-600 text-white border-blue-500'
+                  ? 'bg-blue-600 text-white border-blue-500 shadow-sm'
                   : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white hover:bg-slate-800'
               }`}
-              title={title}
+              title={slide.title}
             >
-              {idx + 1}
+              {idx + 1}. {slide.shortLabel}
             </button>
           ))}
           <button
@@ -441,228 +452,206 @@ export function TvDashboard({
       </div>
 
       {/* ========================================================================
-          SLIDE 0: QUANTIDADE DE FROTAS & VISÃO GERAL
+          SLIDE 0: QUANTIDADE DE FROTAS & VISÃO GERAL (COMPACTO — 1 TELA)
          ======================================================================== */}
       {currentSlide === 0 && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="space-y-4 animate-fade-in">
+          {/* 4 KPI Cards Compactos */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {/* Card 1: Veículos */}
-            <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3">
+            <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-mono tracking-wider font-bold text-slate-400">
+                <span className="text-[11px] uppercase font-mono tracking-wider font-bold text-slate-400">
                   Frota de Veículos
                 </span>
-                <div className="p-2 bg-blue-500/10 text-blue-400 rounded-xl border border-blue-500/20">
-                  <Truck className="w-5 h-5" />
-                </div>
+                <Truck className="w-4 h-4 text-blue-400" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-black text-white font-mono">{totalVehicles}</span>
+                <span className="text-3xl font-black text-white font-mono leading-none">{totalVehicles}</span>
                 <span className="text-xs text-emerald-400 font-bold font-mono">
-                  {availableVehicles} Disponíveis
+                  {availableVehicles} Disp.
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-800/80 text-[10px] font-mono text-center">
-                <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                  <span className="text-indigo-400 font-bold block">{inUseVehicles}</span>
-                  <span className="text-slate-400">Em Uso</span>
-                </div>
-                <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                  <span className="text-amber-400 font-bold block">{maintenanceVehicles}</span>
-                  <span className="text-slate-400">Oficina</span>
-                </div>
-                <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                  <span className="text-rose-400 font-bold block">{inactiveVehicles}</span>
-                  <span className="text-slate-400">Inativos</span>
-                </div>
+              <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-slate-800/80 text-slate-400">
+                <span className="text-indigo-400 font-semibold">{inUseVehicles} Uso</span>
+                <span className="text-amber-400 font-semibold">{maintenanceVehicles} Ofic.</span>
+                <span className="text-rose-400 font-semibold">{inactiveVehicles} Inat.</span>
               </div>
             </div>
 
             {/* Card 2: Maquinários */}
-            <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3">
+            <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-mono tracking-wider font-bold text-slate-400">
+                <span className="text-[11px] uppercase font-mono tracking-wider font-bold text-slate-400">
                   Maquinários & Pesados
                 </span>
-                <div className="p-2 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20">
-                  <Gauge className="w-5 h-5" />
-                </div>
+                <Gauge className="w-4 h-4 text-purple-400" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-black text-white font-mono">{totalEquipments}</span>
+                <span className="text-3xl font-black text-white font-mono leading-none">{totalEquipments}</span>
                 <span className="text-xs text-emerald-400 font-bold font-mono">
-                  {availableEquipments} Disponíveis
+                  {availableEquipments} Disp.
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80 text-[10px] font-mono text-center">
-                <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                  <span className="text-indigo-400 font-bold block">{inUseEquipments}</span>
-                  <span className="text-slate-400">Em Operação</span>
-                </div>
-                <div className="bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                  <span className="text-amber-400 font-bold block">{maintenanceEquipments}</span>
-                  <span className="text-slate-400">Manutenção</span>
-                </div>
+              <div className="flex items-center justify-between text-[11px] font-mono pt-1.5 border-t border-slate-800/80 text-slate-400">
+                <span className="text-indigo-400 font-semibold">{inUseEquipments} Em Operação</span>
+                <span className="text-amber-400 font-semibold">{maintenanceEquipments} Manut.</span>
               </div>
             </div>
 
-            {/* Card 3: Viagens Ativas & Logística */}
-            <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3">
+            {/* Card 3: Viagens & Logística */}
+            <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-mono tracking-wider font-bold text-slate-400">
+                <span className="text-[11px] uppercase font-mono tracking-wider font-bold text-slate-400">
                   Viagens & Logística
                 </span>
-                <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20">
-                  <Activity className="w-5 h-5" />
-                </div>
+                <Activity className="w-4 h-4 text-indigo-400" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-black text-white font-mono">{activeTrips.length}</span>
-                <span className="text-xs text-blue-400 font-bold font-mono">
+                <span className="text-3xl font-black text-white font-mono leading-none">{activeTrips.length}</span>
+                <span className="text-xs text-sky-400 font-bold font-mono">
                   {logisticsEnabledVehicles} em Logística
                 </span>
               </div>
-              <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-300 font-medium truncate">
+              <div className="pt-1.5 border-t border-slate-800/80 text-[11px] font-mono text-slate-300 truncate">
                 {activeTrips.length > 0
-                  ? `➔ ${activeTrips[0].driverName} (${activeTrips[0].vehicleModelPlate})`
-                  : `${monthLogisticsSchedules.length} programações em ${MONTH_NAMES[currentMonth]}`}
+                  ? `Em rota: ${activeTrips[0].vehicleModelPlate}`
+                  : `${monthLogisticsSchedules.length} agendas em ${MONTH_NAMES[currentMonth]}`}
               </div>
             </div>
 
-            {/* Card 4: Estoque de Combustível */}
-            <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3">
+            {/* Card 4: Combustível & Obras */}
+            <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-4 shadow-lg flex flex-col justify-between gap-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs uppercase font-mono tracking-wider font-bold text-slate-400">
-                  Estoque de Combustível
+                <span className="text-[11px] uppercase font-mono tracking-wider font-bold text-slate-400">
+                  Combustível & Obras
                 </span>
-                <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
-                  <Fuel className="w-5 h-5" />
-                </div>
+                <Fuel className="w-4 h-4 text-amber-400" />
               </div>
               <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-black text-white font-mono">
+                <span className="text-3xl font-black text-white font-mono leading-none">
                   {totalFuelStock.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L
                 </span>
                 <span className="text-xs text-amber-400 font-bold font-mono">
-                  {totalFuelConsumed.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L Consumidos
+                  {works.length} Obras
                 </span>
               </div>
-              <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-300 font-medium">
-                {works.length} Obras / Canteiros integrados
+              <div className="pt-1.5 border-t border-slate-800/80 text-[11px] font-mono text-slate-300">
+                Consumo acumulado: {totalFuelConsumed.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L
               </div>
             </div>
           </div>
 
-          {/* Quantitativo Detalhado de Frotas por Categoria & Maquinários */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Tabelas Resumo Lado a Lado (Veículos por Categoria + Maquinários por Tipo) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* QTD Frotas de Veículos por Categoria */}
-            <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-base font-black text-white flex items-center gap-2 font-display">
-                  <Layers className="w-5 h-5 text-blue-400" />
-                  Quantidade de Veículos por Categoria
+            <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2.5">
+                <h3 className="text-sm font-black text-white flex items-center gap-2 font-display">
+                  <Layers className="w-4 h-4 text-blue-400" />
+                  Veículos por Categoria
                 </h3>
-                <span className="text-xs font-mono font-bold text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-lg border border-blue-500/25">
-                  Total Ativos: {totalVehicles}
+                <span className="text-[11px] font-mono font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/25">
+                  Ativos: {totalVehicles}
                 </span>
               </div>
 
               {vehiclesByCategory.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 text-xs">
+                <div className="py-8 text-center text-slate-400 text-xs">
                   Nenhum veículo ativo cadastrado.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {vehiclesByCategory.map(item => {
-                    const pct = totalVehicles > 0 ? Math.round((item.total / totalVehicles) * 100) : 0;
-                    return (
-                      <div
-                        key={item.category}
-                        className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-2.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-sm font-bold text-white capitalize">
-                              {item.category}
-                            </span>
-                            <span className="ml-2 text-[10px] font-mono text-slate-400">
-                              ({pct}% da frota)
-                            </span>
-                          </div>
-                          <span className="text-xl font-black font-mono text-blue-400">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs font-mono">
+                    <thead>
+                      <tr className="text-[10px] uppercase text-slate-400 border-b border-slate-800/90">
+                        <th className="text-left py-1.5 pr-2 font-bold">Categoria</th>
+                        <th className="text-center py-1.5 px-1.5 font-bold text-blue-400">QTD</th>
+                        <th className="text-center py-1.5 px-1.5 font-bold text-emerald-400">Disp.</th>
+                        <th className="text-center py-1.5 px-1.5 font-bold text-indigo-400">Uso</th>
+                        <th className="text-center py-1.5 px-1.5 font-bold text-amber-400">Ofic.</th>
+                        <th className="text-center py-1.5 pl-1.5 font-bold text-sky-400">Log.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {vehiclesByCategory.map(item => (
+                        <tr key={item.category} className="hover:bg-slate-900/60">
+                          <td className="py-2 pr-2 font-sans font-bold text-white capitalize truncate max-w-[180px]">
+                            {item.category}
+                          </td>
+                          <td className="py-2 px-1.5 text-center font-black text-blue-400 text-sm">
                             {item.total}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-4 gap-2 text-[10px] font-mono text-center">
-                          <div className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
-                            <span className="text-emerald-400 font-bold block">{item.available}</span>
-                            <span className="text-slate-400">Disponíveis</span>
-                          </div>
-                          <div className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
-                            <span className="text-indigo-400 font-bold block">{item.inUse}</span>
-                            <span className="text-slate-400">Em Uso</span>
-                          </div>
-                          <div className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
-                            <span className="text-amber-400 font-bold block">{item.maintenance}</span>
-                            <span className="text-slate-400">Oficina</span>
-                          </div>
-                          <div className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
-                            <span className="text-sky-400 font-bold block">{item.logistics}</span>
-                            <span className="text-slate-400">Logística</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                          </td>
+                          <td className="py-2 px-1.5 text-center font-bold text-emerald-400">
+                            {item.available}
+                          </td>
+                          <td className="py-2 px-1.5 text-center font-bold text-indigo-400">
+                            {item.inUse}
+                          </td>
+                          <td className="py-2 px-1.5 text-center font-bold text-amber-400">
+                            {item.maintenance}
+                          </td>
+                          <td className="py-2 pl-1.5 text-center font-bold text-sky-400">
+                            {item.logistics}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
 
-            {/* QTD Maquinários por Tipo + Taxa de Disponibilidade */}
-            <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-base font-black text-white flex items-center gap-2 font-display">
-                  <Gauge className="w-5 h-5 text-purple-400" />
-                  Quantidade de Maquinários por Tipo
+            {/* QTD Maquinários por Tipo */}
+            <div className="bg-[#0F172A] border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2.5">
+                <h3 className="text-sm font-black text-white flex items-center gap-2 font-display">
+                  <Gauge className="w-4 h-4 text-purple-400" />
+                  Maquinários por Tipo
                 </h3>
-                <span className="text-xs font-mono font-bold text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-lg border border-purple-500/25">
+                <span className="text-[11px] font-mono font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/25">
                   Total: {totalEquipments}
                 </span>
               </div>
 
               {equipmentsByType.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 text-xs">
+                <div className="py-8 text-center text-slate-400 text-xs">
                   Nenhum maquinário cadastrado.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {equipmentsByType.map(item => (
-                    <div
-                      key={item.type}
-                      className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-2.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold text-white">{item.type}</span>
-                        <span className="text-xl font-black font-mono text-purple-400">
-                          {item.total}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-[10px] font-mono text-center">
-                        <div className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
-                          <span className="text-emerald-400 font-bold block">{item.available}</span>
-                          <span className="text-slate-400">Disponíveis</span>
-                        </div>
-                        <div className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
-                          <span className="text-indigo-400 font-bold block">{item.inUse}</span>
-                          <span className="text-slate-400">Em Operação</span>
-                        </div>
-                        <div className="bg-slate-950 p-1.5 rounded-lg border border-slate-800">
-                          <span className="text-amber-400 font-bold block">{item.maintenance}</span>
-                          <span className="text-slate-400">Manutenção</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs font-mono">
+                    <thead>
+                      <tr className="text-[10px] uppercase text-slate-400 border-b border-slate-800/90">
+                        <th className="text-left py-1.5 pr-2 font-bold">Tipo de Equipamento</th>
+                        <th className="text-center py-1.5 px-2 font-bold text-purple-400">QTD</th>
+                        <th className="text-center py-1.5 px-2 font-bold text-emerald-400">Disp.</th>
+                        <th className="text-center py-1.5 px-2 font-bold text-indigo-400">Oper.</th>
+                        <th className="text-center py-1.5 pl-2 font-bold text-amber-400">Manut.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {equipmentsByType.map(item => (
+                        <tr key={item.type} className="hover:bg-slate-900/60">
+                          <td className="py-2 pr-2 font-sans font-bold text-white truncate max-w-[200px]">
+                            {item.type}
+                          </td>
+                          <td className="py-2 px-2 text-center font-black text-purple-400 text-sm">
+                            {item.total}
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold text-emerald-400">
+                            {item.available}
+                          </td>
+                          <td className="py-2 px-2 text-center font-bold text-indigo-400">
+                            {item.inUse}
+                          </td>
+                          <td className="py-2 pl-2 text-center font-bold text-amber-400">
+                            {item.maintenance}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -698,6 +687,45 @@ export function TvDashboard({
               <span className="px-3 py-1.5 rounded-xl bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold">
                 {monthLogisticsSchedules.filter(s => s.isThirdPartyRental).length} Locados Terceiros
               </span>
+              <button
+                type="button"
+                onClick={() =>
+                  exportLogisticsCSV({
+                    schedules: monthLogisticsSchedules,
+                    works,
+                    vehicles,
+                    monthYearLabel: `${MONTH_NAMES[currentMonth]} de ${currentYear}`,
+                    monthStartStr,
+                    monthEndStr,
+                    scopeDescription: `Painel TV - Agenda de ${MONTH_NAMES[currentMonth]} de ${currentYear}`,
+                  })
+                }
+                disabled={monthLogisticsSchedules.length === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/35 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 font-bold transition-colors cursor-pointer"
+                title="Exportar Calendário do Mês em CSV (Excel)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  exportLogisticsPDF({
+                    schedules: monthLogisticsSchedules,
+                    works,
+                    vehicles,
+                    monthYearLabel: `${MONTH_NAMES[currentMonth]} de ${currentYear}`,
+                    monthStartStr,
+                    monthEndStr,
+                    scopeDescription: `Painel TV - Agenda de ${MONTH_NAMES[currentMonth]} de ${currentYear}`,
+                  })
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/50 font-bold transition-colors cursor-pointer"
+                title="Exportar Calendário do Mês em PDF (Offline)"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                PDF
+              </button>
             </div>
           </div>
 
@@ -962,9 +990,118 @@ export function TvDashboard({
       )}
 
       {/* ========================================================================
-          SLIDE 3: QUADRO DE CUSTOS (SEPARADO DO QUADRO DE COMBUSTÍVEL)
+          SLIDE 3: MAPA DE ROTAS E ITINERÁRIOS POR CIDADES (OBRAS)
          ======================================================================== */}
       {currentSlide === 3 && (
+        <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5 animate-fade-in">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-blue-600/20 border border-blue-500/30 rounded-2xl text-blue-400">
+                <Compass className="w-6 h-6 animate-spin" style={{ animationDuration: '20s' }} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white font-display">
+                  Mapa de Rotas e Itinerários por Cidades (Obras)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Visualização geográfica em tempo real das conexões entre a Matriz, canteiros de obras, viagens e rotas logísticas.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/15 text-blue-300 border border-blue-500/30 font-bold">
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                {works.length} Cidades de Obras
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                {totalKmDriven.toLocaleString('pt-BR')} km Mapeados
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold">
+                {monthLogisticsSchedules.length} Rotas no Mês
+              </span>
+            </div>
+          </div>
+
+          <LeafletRouteMap
+            works={works}
+            trips={trips}
+            logisticsSchedules={logisticsSchedules}
+            heightClass="h-[440px]"
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-2">
+              <span className="text-[10px] uppercase font-mono font-bold text-slate-400 block">
+                Legenda do Mapa de Rotas
+              </span>
+              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-300 pt-1">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-slate-900 border-2 border-sky-400 inline-block shrink-0" />
+                  <span>Matriz (Palmas/TO)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-blue-600 border-2 border-blue-200 inline-block shrink-0" />
+                  <span>Cidades / Obras</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-emerald-600 border-2 border-emerald-200 inline-block shrink-0" />
+                  <span>Itinerários de Viagens</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-violet-600 border-2 border-violet-200 inline-block shrink-0" />
+                  <span>Rotas de Logística</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase font-mono font-bold text-slate-400">
+                  Cidades / Canteiros Atendidos ({works.length})
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                  {activeWorks.length} Obras Ativas
+                </span>
+              </div>
+              {works.length === 0 ? (
+                <div className="text-xs text-slate-500 py-2">Nenhuma obra cadastrada.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 max-h-[130px] overflow-y-auto pr-1">
+                  {works.map(w => {
+                    const workVehiclesCount = vehicles.filter(v => v.workId === w.id).length;
+                    const workTripsCount = trips.filter(t => t.workId === w.id).length;
+                    return (
+                      <div
+                        key={w.id}
+                        className="bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-white truncate" title={w.name}>
+                            {w.name}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono truncate">
+                            📍 {w.city}/{w.state}
+                          </div>
+                        </div>
+                        <div className="text-right font-mono text-[10px] shrink-0">
+                          <span className="text-sky-400 font-bold block">{workVehiclesCount} veíc.</span>
+                          <span className="text-slate-400">{workTripsCount} viag.</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================
+          SLIDE 4: QUADRO DE CUSTOS (SEPARADO DO QUADRO DE COMBUSTÍVEL)
+         ======================================================================== */}
+      {currentSlide === 4 && (
         <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6 animate-fade-in">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
             <div>
@@ -1120,9 +1257,9 @@ export function TvDashboard({
       )}
 
       {/* ========================================================================
-          SLIDE 4: QUADRO DE COMBUSTÍVEL (SEPARADO DO QUADRO DE CUSTOS)
+          SLIDE 5: QUADRO DE COMBUSTÍVEL (SEPARADO DO QUADRO DE CUSTOS)
          ======================================================================== */}
-      {currentSlide === 4 && (
+      {currentSlide === 5 && (
         <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-6 animate-fade-in">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
             <div>
@@ -1249,9 +1386,9 @@ export function TvDashboard({
       )}
 
       {/* ========================================================================
-          SLIDE 5: FROTA EM TRÂNSITO / VIAGENS ATIVAS
+          SLIDE 6: FROTA EM TRÂNSITO / VIAGENS ATIVAS
          ======================================================================== */}
-      {currentSlide === 5 && (
+      {currentSlide === 6 && (
         <div className="bg-[#0F172A] border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 animate-fade-in">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h3 className="text-lg font-bold text-white flex items-center gap-2 font-display">
