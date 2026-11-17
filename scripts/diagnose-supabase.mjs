@@ -6,10 +6,10 @@ const rawEnvKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 const cleanUrl = (url) => url.replace(/\/rest\/v1\/?$/, '');
 const supabaseUrl = rawEnvUrl.startsWith('http')
   ? cleanUrl(rawEnvUrl)
-  : 'https://xiusucnttvtmwmshgdhh.supabase.co';
+  : 'https://shbhahjjdgkccdougxit.supabase.co';
 
 const fallbackKey =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpdXN1Y250dHZ0bXdtc2hnZGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNzgxNzAsImV4cCI6MjEwMTk1NDE3MH0.LQ5db6CJCrBDk3NO107le43rXWbahGfatzpKnwX3Wlc';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNoYmhhaGpqZGdrY2Nkb3VneGl0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMTc5MzEsImV4cCI6MjA5NjY5MzkzMX0.rXi3Q_CFHLsrnyX0Ez-OxJG4BCDNYXbbcAPztrSpL-c';
 const supabaseAnonKey = rawEnvKey.length > 20 ? rawEnvKey : fallbackKey;
 
 const EXPECTED_VEHICLE_COLUMNS = [
