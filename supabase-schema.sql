@@ -80,23 +80,24 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
     model TEXT NOT NULL,
     plate TEXT NOT NULL,
     brand TEXT NOT NULL,
-    year INTEGER,
-    color TEXT,
-    "currentKm" NUMERIC DEFAULT 0,
-    "lastMaintenanceKm" NUMERIC DEFAULT 0,
-    "maintenanceIntervalKm" NUMERIC DEFAULT 10000,
+    year INTEGER NOT NULL,
+    color TEXT NOT NULL,
+    "currentKm" NUMERIC NOT NULL DEFAULT 0,
+    "lastMaintenanceKm" NUMERIC,
+    "maintenanceIntervalKm" NUMERIC,
     "nextOilChangeKm" NUMERIC,
-    status TEXT DEFAULT 'available', -- 'available', 'in_use', 'maintenance', 'inactive'
-    "isActive" BOOLEAN DEFAULT true,
-    category TEXT,
-    "tankCapacityLiters" NUMERIC,
+    status TEXT NOT NULL DEFAULT 'available', -- 'available', 'in_use', 'maintenance' (inativo via "isActive" = false)
     "workId" TEXT REFERENCES public.construction_works(id) ON DELETE SET NULL,
     "workName" TEXT,
     "maintenanceReason" TEXT,
-    "maintenanceSentAt" TEXT,
+    "maintenanceSentAt" TIMESTAMP WITH TIME ZONE,
+    category TEXT,
+    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     "maintenanceHistory" JSONB DEFAULT '[]'::jsonb,
+    "isActive" BOOLEAN DEFAULT true,
+    "tankCapacityLiters" NUMERIC,
     "hasLogisticsControl" BOOLEAN DEFAULT false,
-    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    CONSTRAINT vehicles_status_check CHECK (status = ANY (ARRAY['available'::text, 'in_use'::text, 'maintenance'::text]))
 );
 
 -- ------------------------------------------------------------------------------
@@ -358,6 +359,7 @@ NOTIFY pgrst, 'reload schema';
 -- ==============================================================================
 CREATE INDEX IF NOT EXISTS idx_vehicles_plate ON public.vehicles(plate);
 CREATE INDEX IF NOT EXISTS idx_vehicles_status ON public.vehicles(status);
+CREATE INDEX IF NOT EXISTS idx_vehicles_workid ON public.vehicles("workId");
 CREATE INDEX IF NOT EXISTS idx_equipments_status ON public.equipments(status);
 CREATE INDEX IF NOT EXISTS idx_trips_status ON public.trips(status);
 CREATE INDEX IF NOT EXISTS idx_trips_driver ON public.trips("driverId");

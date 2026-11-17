@@ -212,17 +212,38 @@ export class FleetStore {
       if (mLogs !== null) {
         if (vData !== null) {
           vData.forEach(v => {
-            v.maintenanceHistory = mLogs.filter(log => log.assetId === v.id && log.assetType === 'vehicle');
+            const logsFromTable = mLogs.filter(log => log.assetId === v.id && log.assetType === 'vehicle');
+            if (logsFromTable.length > 0) {
+              v.maintenanceHistory = logsFromTable;
+            } else if (!Array.isArray(v.maintenanceHistory)) {
+              v.maintenanceHistory = [];
+            }
           });
         }
         if (eData !== null) {
           eData.forEach(e => {
-            e.maintenanceHistory = mLogs.filter(log => log.assetId === e.id && log.assetType === 'equipment');
+            const logsFromTable = mLogs.filter(log => log.assetId === e.id && log.assetType === 'equipment');
+            if (logsFromTable.length > 0) {
+              e.maintenanceHistory = logsFromTable;
+            } else if (!Array.isArray(e.maintenanceHistory)) {
+              e.maintenanceHistory = [];
+            }
           });
         }
       }
 
-      if (vData !== null) this.vehicles = vData;
+      if (vData !== null) {
+        this.vehicles = vData.map(v => {
+          const isActive = v.isActive !== false;
+          const mappedStatus = !isActive && v.status !== 'in_use' ? 'inactive' : v.status;
+          return {
+            ...v,
+            isActive,
+            hasLogisticsControl: Boolean(v.hasLogisticsControl),
+            status: mappedStatus,
+          };
+        });
+      }
       if (eData !== null) this.equipments = eData;
 
       // Consistency check: ensure only assets in active trips/usages are marked as in_use
@@ -234,7 +255,7 @@ export class FleetStore {
           v.status = 'in_use';
           needsSync = true;
         } else if (!isInActiveTrip && v.status === 'in_use') {
-          v.status = 'available';
+          v.status = v.isActive === false ? 'inactive' : 'available';
           needsSync = true;
         }
       });
@@ -275,11 +296,16 @@ export class FleetStore {
 
       const getSanitizedItems = (colsToExclude: string[]) => {
         return items.map(item => {
-          const copy = { ...item };
           if (table === 'vehicles') {
-            delete copy.maintenanceHistory;
-            copy.hasLogisticsControl = Boolean(copy.hasLogisticsControl);
-          } else if (table === 'equipments') {
+            const copy: Record<string, any> = this.sanitizeVehicleForSupabase(item as Vehicle);
+            for (const col of colsToExclude) {
+              delete copy[col];
+            }
+            return copy;
+          }
+
+          const copy = { ...item };
+          if (table === 'equipments') {
             delete copy.maintenanceHistory;
           }
 
@@ -692,16 +718,52 @@ export class FleetStore {
 
   private sanitizeVehicleForSupabase(vehicle: Vehicle) {
     const workIds = new Set(this.works.map(w => w.id));
-    const { maintenanceHistory: _maintenanceHistory, ...rest } = vehicle;
+    const isActive =
+      vehicle.isActive !== undefined
+        ? Boolean(vehicle.isActive) && vehicle.status !== 'inactive'
+        : vehicle.status !== 'inactive';
+    const dbStatus: 'available' | 'in_use' | 'maintenance' =
+      vehicle.status === 'in_use'
+        ? 'in_use'
+        : vehicle.status === 'maintenance'
+        ? 'maintenance'
+        : 'available';
+    const validWorkId = vehicle.workId && workIds.has(vehicle.workId) ? vehicle.workId : null;
+
     return {
-      ...rest,
-      workId: rest.workId && workIds.has(rest.workId) ? rest.workId : null,
-      workName: rest.workId && workIds.has(rest.workId) ? (rest.workName || null) : null,
-      tankCapacityLiters: rest.tankCapacityLiters ?? null,
-      maintenanceReason: rest.maintenanceReason ?? null,
-      maintenanceSentAt: rest.maintenanceSentAt ?? null,
-      isActive: rest.isActive !== undefined ? Boolean(rest.isActive) : rest.status !== 'inactive',
-      hasLogisticsControl: Boolean(rest.hasLogisticsControl),
+      id: String(vehicle.id).trim(),
+      model: String(vehicle.model || '').trim(),
+      plate: String(vehicle.plate || vehicle.id || '').trim().toUpperCase(),
+      brand: String(vehicle.brand || '').trim(),
+      year: Math.trunc(Number(vehicle.year)) || new Date().getFullYear(),
+      color: String(vehicle.color || '').trim() || 'Não informada',
+      currentKm: Number(vehicle.currentKm) || 0,
+      lastMaintenanceKm:
+        vehicle.lastMaintenanceKm !== undefined && vehicle.lastMaintenanceKm !== null
+          ? Number(vehicle.lastMaintenanceKm)
+          : null,
+      maintenanceIntervalKm:
+        vehicle.maintenanceIntervalKm !== undefined && vehicle.maintenanceIntervalKm !== null
+          ? Number(vehicle.maintenanceIntervalKm)
+          : null,
+      nextOilChangeKm:
+        vehicle.nextOilChangeKm !== undefined && vehicle.nextOilChangeKm !== null
+          ? Number(vehicle.nextOilChangeKm)
+          : null,
+      status: dbStatus,
+      workId: validWorkId,
+      workName: validWorkId ? vehicle.workName || null : null,
+      maintenanceReason: vehicle.maintenanceReason ? String(vehicle.maintenanceReason) : null,
+      maintenanceSentAt: vehicle.maintenanceSentAt ? String(vehicle.maintenanceSentAt) : null,
+      category: vehicle.category ? String(vehicle.category) : null,
+      createdAt: vehicle.createdAt || new Date().toISOString(),
+      maintenanceHistory: Array.isArray(vehicle.maintenanceHistory) ? vehicle.maintenanceHistory : [],
+      isActive,
+      tankCapacityLiters:
+        vehicle.tankCapacityLiters !== undefined && vehicle.tankCapacityLiters !== null
+          ? Number(vehicle.tankCapacityLiters)
+          : null,
+      hasLogisticsControl: Boolean(vehicle.hasLogisticsControl),
     };
   }
 
