@@ -52,6 +52,7 @@ export default function App() {
   // Feedback notifications
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Subscribe state updates to automatically handle triggers across components
   useEffect(() => {
@@ -86,8 +87,15 @@ export default function App() {
     }
   }, [currentUser]);
 
+  // Refresh fresh DB data when switching tabs
+  useEffect(() => {
+    if (currentUser) {
+      store.refreshFromDatabase();
+    }
+  }, [activeTab, currentUser?.id, store]);
+
   // Handle Login
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
     setAuthSuccess('');
@@ -104,22 +112,27 @@ export default function App() {
       return;
     }
 
-    const res = store.login(formattedLoginId, loginPassword);
-    if (res.success) {
-      setAuthSuccess('Bem-vindo de volta! Acessando o sistema...');
-      setLoginId('');
-      setLoginPassword('');
-      if (res.user?.role === 'abastecedor') {
-        setActiveTab('fuel');
-      } else if (res.user?.role === 'admin') {
-        setActiveTab('drivers');
-      } else if (res.user?.role === 'gerencial') {
-        setActiveTab('manager-dashboard');
+    setIsLoggingIn(true);
+    try {
+      const res = await store.loginFromDatabase(formattedLoginId, loginPassword);
+      if (res.success) {
+        setAuthSuccess('Bem-vindo de volta! Acessando o sistema...');
+        setLoginId('');
+        setLoginPassword('');
+        if (res.user?.role === 'abastecedor') {
+          setActiveTab('fuel');
+        } else if (res.user?.role === 'admin') {
+          setActiveTab('drivers');
+        } else if (res.user?.role === 'gerencial') {
+          setActiveTab('manager-dashboard');
+        } else {
+          setActiveTab('my-trips');
+        }
       } else {
-        setActiveTab('my-trips');
+        setAuthError(res.message);
       }
-    } else {
-      setAuthError(res.message);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -315,9 +328,10 @@ export default function App() {
 
                 <button
                   type="submit"
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm transition-all active:scale-98 cursor-pointer text-sm"
+                  disabled={isLoggingIn}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold rounded-xl shadow-sm transition-all active:scale-98 cursor-pointer text-sm"
                 >
-                  Entrar no Painel
+                  {isLoggingIn ? 'Consultando banco de dados...' : 'Entrar no Painel'}
                 </button>
               </form>
             </div>

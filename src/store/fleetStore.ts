@@ -1,128 +1,29 @@
 import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog, Supplier, SupplierCategory, FuelInflow, FuelDispense, FuelDispenseType, FiscalDocType, WorkFuelBalance, LogisticsSchedule, LogisticsAllocationType, LogisticsScheduleStatus } from '../types';
 import { supabase } from '../lib/supabase';
 
-// Simple high-quality odometer and dashboard SVGs represented as base64 or clean dataURI to seed initial photos nicely
-const MOCK_ODOMETER_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%231e293b" /><circle cx="200" cy="150" r="100" fill="none" stroke="%2338bdf8" stroke-width="8" stroke-dasharray="300 100" /><path d="M 200 150 L 140 100" stroke="%23ef4444" stroke-width="6" stroke-linecap="round" /><circle cx="200" cy="150" r="12" fill="%23f8fafc" /><rect x="150" y="200" width="100" height="30" rx="4" fill="%230f172a" stroke="%23334155" stroke-width="2" /><text x="200" y="221" font-family="monospace" font-size="16" fill="%2322c55e" font-weight="bold" text-anchor="middle">045230 km</text><text x="200" y="110" font-family="sans-serif" font-size="12" fill="%2394a3b8" text-anchor="middle">HODÔMETRO</text><text x="200" y="270" font-family="sans-serif" font-size="10" fill="%2364748b" text-anchor="middle">FROTA CONTROL - REGISTRO ATIVO</text></svg>';
-
-const MOCK_CHECKOUT_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%230f172a" /><circle cx="200" cy="150" r="90" fill="none" stroke="%2322c55e" stroke-width="6" /><path d="M 120 150 a 80 80 0 0 1 160 0" fill="none" stroke="%23e2e8f0" stroke-width="3" stroke-dasharray="10 5" /><text x="200" y="145" font-family="sans-serif" font-size="14" fill="%23e2e8f0" text-anchor="middle" font-weight="600">CHECKOUT OK</text><rect x="130" y="170" width="140" height="40" rx="6" fill="%231e293b" /><text x="200" y="195" font-family="monospace" font-size="18" fill="%2338bdf8" font-weight="bold" text-anchor="middle">045410 km</text><path d="M 160 240 L 240 240" stroke="%2322c55e" stroke-width="4" stroke-linecap="round" /><circle cx="200" cy="80" r="10" fill="%2322c55e" /><text x="200" y="265" font-family="sans-serif" font-size="10" fill="%2364748b" text-anchor="middle">Retorno sem avarias registradas</text></svg>';
-
-const MOCK_HORIMETRO_PHOTO = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="100%" height="100%" fill="%230f172a" /><circle cx="200" cy="140" r="85" fill="none" stroke="%23fbbf24" stroke-width="8" stroke-dasharray="320 80" /><path d="M 200 140 L 210 85" stroke="%23f3f4f6" stroke-width="5" stroke-linecap="round" /><circle cx="200" cy="140" r="10" fill="%23fbbf24" /><rect x="130" y="200" width="140" height="32" rx="6" fill="%231e293b" stroke="%234b5563" stroke-width="2" /><text x="200" y="222" font-family="monospace" font-size="16" fill="%23fbbf24" font-weight="bold" text-anchor="middle">001240.5 h</text><text x="200" y="105" font-family="sans-serif" font-size="11" fill="%2394a3b8" text-anchor="middle" font-weight="bold">HORÍMETRO</text><text x="200" y="265" font-family="sans-serif" font-size="9" fill="%234b5563" text-anchor="middle">MAQUINÁRIO REGISTRADO</text></svg>';
-
-
-const INITIAL_EQUIPMENT_TYPES: EquipmentType[] = [
-  { id: 'type-1', name: 'Retroescavadeira' },
-  { id: 'type-2', name: 'Caminhão Munck' },
-  { id: 'type-3', name: 'Trator' }
-];
-
-const INITIAL_VEHICLE_CATEGORIES: VehicleCategory[] = [
-  { id: 'cat-1', name: 'Utilitário' },
-  { id: 'cat-2', name: 'Caminhão' }
-];
-
-const INITIAL_SUPPLIERS: Supplier[] = [
-  {
-    id: 'sup-1',
-    cnpj: '12.345.678/0001-90',
-    corporateName: 'Auto Mecânica e Serviços Diesel Ltda',
-    tradeName: 'Mecânica Diesel Central',
-    category: 'prestador',
-    contactName: 'Carlos Eduardo Silva',
-    phone: '(11) 98765-4321',
-    email: 'contato@dieselmecanica.com.br',
-    city: 'São Paulo',
-    state: 'SP',
-    servicesOrProducts: 'Manutenção preventiva e corretiva de motores pesados, suspensão, freios e alinhamento.',
-    status: 'active',
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'sup-2',
-    cnpj: '98.765.432/0001-10',
-    corporateName: 'Distribuidora de Peças e Lubrificantes Rodoviários S/A',
-    tradeName: 'Rodopeças Auto Peças',
-    category: 'fornecedor',
-    contactName: 'Mariana Santos',
-    phone: '(11) 97654-3210',
-    email: 'vendas@rodopecas.com.br',
-    city: 'Campinas',
-    state: 'SP',
-    servicesOrProducts: 'Filtros de óleo e ar, óleos lubrificantes, pneus pesados, baterias e autopeças.',
-    status: 'active',
-    createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
-
-const INITIAL_VEHICLES: Vehicle[] = [];
-
-const INITIAL_USERS: User[] = [];
-
-const INITIAL_TRIPS: Trip[] = [];
-
-const INITIAL_EQUIPMENTS: Equipment[] = [
-  {
-    id: 'RET-01',
-    name: 'Retroescavadeira Caterpillar 416F',
-    brand: 'Caterpillar',
-    model: '416F II',
-    year: 2021,
-    type: 'Retroescavadeira',
-    currentHours: 1240.5,
-    lastMaintenanceHours: 1000,
-    maintenanceIntervalHours: 500,
-    status: 'available',
-    createdAt: new Date(Date.now() - 250 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'MNK-02',
-    name: 'Caminhão Munck Ford Cargo',
-    brand: 'Ford / Madal',
-    model: 'Cargo 2429',
-    year: 2019,
-    type: 'Caminhão Munck',
-    currentHours: 3450.2,
-    lastMaintenanceHours: 3000,
-    maintenanceIntervalHours: 500,
-    status: 'available',
-    createdAt: new Date(Date.now() - 300 * 24 * 60 * 60 * 1000).toISOString()
-  },
-  {
-    id: 'RET-02',
-    name: 'Retroescavadeira Case 580N',
-    brand: 'Case',
-    model: '580N',
-    year: 2018,
-    type: 'Retroescavadeira',
-    currentHours: 4890.0,
-    lastMaintenanceHours: 4500,
-    maintenanceIntervalHours: 500,
-    status: 'maintenance',
-    createdAt: new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
-
-const INITIAL_EQUIPMENT_USAGES: EquipmentUsage[] = [];
-
-
-// Helper to load typed JSON from localstorage
-function loadFromStorage<T>(key: string, defaultValue: T): T {
-  // Disable all caching as requested
+// Limpa qualquer resquício antigo em armazenamento do navegador (nenhum dado é salvo localmente)
+function clearLegacyBrowserStorage(): void {
+  if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(key);
-  } catch (e) {
-    // Ignore
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith('ff_')) keysToRemove.push(k);
+    }
+    keysToRemove.forEach(k => window.localStorage.removeItem(k));
+  } catch {
+    // Ignore storage access restrictions
   }
-  return defaultValue;
-}
-
-const INITIAL_WORKS: ConstructionWork[] = [];
-const INITIAL_FUEL_INFLOWS: FuelInflow[] = [];
-const INITIAL_FUEL_DISPENSES: FuelDispense[] = [];
-
-// Helper to save serializable JSON is safe
-function saveToStorage<T>(key: string, data: T): void {
-  // Disable all caching as requested
-  return;
+  try {
+    const sessionKeysToRemove: string[] = [];
+    for (let i = 0; i < window.sessionStorage.length; i++) {
+      const k = window.sessionStorage.key(i);
+      if (k && k.startsWith('ff_')) sessionKeysToRemove.push(k);
+    }
+    sessionKeysToRemove.forEach(k => window.sessionStorage.removeItem(k));
+  } catch {
+    // Ignore storage access restrictions
+  }
 }
 
 export class FleetStore {
@@ -142,17 +43,22 @@ export class FleetStore {
   public logisticsSchedules: LogisticsSchedule[] = [];
   public currentUser: User | null = null;
 
+  public isLoadingFromDb = false;
+  public lastSyncError: string | null = null;
+
   // Snapshot for differential syncing
   private previousState: Record<string, string> = {};
   private isSyncing = false;
   private syncQueued = false;
   private hasLoadedInitial = false;
+  private realtimeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pollingInterval: ReturnType<typeof setInterval> | null = null;
 
   // Listeners list for component re-renders
   private listeners: (() => void)[] = [];
 
-  private updatePreviousState() {
-    this.previousState = {
+  private updatePreviousState(tableKey?: string) {
+    const map: Record<string, string> = {
       users: JSON.stringify(this.users),
       vehicles: JSON.stringify(this.vehicles),
       trips: JSON.stringify(this.trips),
@@ -166,6 +72,11 @@ export class FleetStore {
       fuelDispenses: JSON.stringify(this.fuelDispenses),
       logisticsSchedules: JSON.stringify(this.logisticsSchedules),
     };
+    if (tableKey) {
+      this.previousState[tableKey] = map[tableKey];
+    } else {
+      this.previousState = map;
+    }
   }
 
   private getChangedItems(tableName: string, currentArray: any[]) {
@@ -189,10 +100,16 @@ export class FleetStore {
     }
   }
 
+  public async refreshFromDatabase() {
+    await this.loadFromSupabase();
+  }
+
   private async loadFromSupabase() {
+    if (this.isLoadingFromDb) return;
     if (this.hasLoadedInitial && (this.isSyncing || this.syncQueued)) {
       return; // Never overwrite pending local changes while sync is in flight
     }
+    this.isLoadingFromDb = true;
     try {
       const fetchTable = async (tableName: string) => {
         try {
@@ -270,6 +187,12 @@ export class FleetStore {
             createdAt: new Date().toISOString()
           });
         }
+        if (this.currentUser) {
+          const freshCurrent = this.users.find(u => u.id === this.currentUser?.id);
+          if (freshCurrent) {
+            this.currentUser = freshCurrent;
+          }
+        }
       }
       if (works !== null) this.works = works as ConstructionWork[];
       if (equipmentTypes !== null) this.equipmentTypes = equipmentTypes as EquipmentType[];
@@ -337,11 +260,13 @@ export class FleetStore {
       }
     } catch (error) {
       console.warn("Exception during overall Supabase state loader:", error);
+    } finally {
+      this.isLoadingFromDb = false;
     }
   }
 
-  private async syncTable(table: string, items: any[]) {
-    if (!items || items.length === 0) return;
+  private async syncTable(table: string, items: any[]): Promise<boolean> {
+    if (!items || items.length === 0) return true;
     try {
       const userIds = new Set(this.users.map(u => u.id));
       const workIds = new Set(this.works.map(w => w.id));
@@ -417,53 +342,11 @@ export class FleetStore {
         });
       };
 
-      let columnsToExclude: string[] = [];
-      let sanitized = getSanitizedItems(columnsToExclude);
-      
-      let { error } = await supabase.from(table).upsert(sanitized);
-
-      let attempts = 0;
-      while (error && attempts < 8) {
-        attempts++;
-        const isColumnSchemaError = 
-          error.message.includes('schema cache') || 
-          error.message.includes('column') || 
-          error.message.includes('does not exist');
-
-        if (!isColumnSchemaError) break;
-
-        let added = false;
-        const match = error.message.match(/Could not find the '([^']+)' column/i);
-        if (match && match[1] && !columnsToExclude.includes(match[1])) {
-          columnsToExclude.push(match[1]);
-          added = true;
-        } else if (table === 'users') {
-          if (error.message.includes('isApproved') && !columnsToExclude.includes('isApproved')) {
-            columnsToExclude.push('isApproved');
-            added = true;
-          }
-          if (error.message.includes('password') && !columnsToExclude.includes('password')) {
-            columnsToExclude.push('password');
-            added = true;
-          }
-          if (!added) {
-            for (const c of ['isApproved', 'password']) {
-              if (!columnsToExclude.includes(c)) {
-                columnsToExclude.push(c);
-                added = true;
-              }
-            }
-          }
-        }
-
-        if (!added) break;
-
-        sanitized = getSanitizedItems(columnsToExclude);
-        const retryRes = await supabase.from(table).upsert(sanitized);
-        error = retryRes.error;
-      }
+      const sanitized = getSanitizedItems([]);
+      const { error } = await supabase.from(table).upsert(sanitized);
 
       if (error) {
+        this.lastSyncError = `[${table}] ${error.message}`;
         const isSchemaWarning = error.message && (
           error.message.includes('schema cache') || 
           error.message.includes('relation') || 
@@ -471,34 +354,30 @@ export class FleetStore {
           error.message.includes('column')
         );
 
-        // If it's a "Failed to fetch" (network/offline error), log as warning instead of console.error to keep the app functional
         if (error.message && error.message.includes('Failed to fetch')) {
-          console.warn(`[Supabase Offline/Blocked] Failed to sync ${table} - local changes are fully preserved locally.`);
+          console.warn(`[Supabase Offline/Blocked] Falha ao sincronizar ${table}.`);
         } else if (isSchemaWarning) {
-          console.warn(`[Supabase Schema Out of Sync] Table '${table}' could not be synced: ${error.message}. Please run the contents of 'supabase-schema.sql' in your Supabase SQL Editor to make sure all tables exist.`);
+          console.warn(`[Supabase Schema] Tabela '${table}' rejeitou envio sem omitir colunas: ${error.message}. Verifique 'supabase-schema.sql'.`);
         } else {
           console.error(`Error syncing ${table}:`, error.message);
         }
+        return false;
       }
-    } catch (e: any) {
-      const isSchemaWarning = e && e.message && (
-        e.message.includes('schema cache') || 
-        e.message.includes('relation') || 
-        e.message.includes('does not exist') ||
-        e.message.includes('column')
-      );
 
+      this.lastSyncError = null;
+      return true;
+    } catch (e: any) {
+      this.lastSyncError = `[${table}] ${e?.message || e}`;
       if (e && e.message && e.message.includes('Failed to fetch')) {
         console.warn(`[Supabase Offline/Blocked] Exception syncing ${table} - connection unavailable.`);
-      } else if (isSchemaWarning) {
-        console.warn(`[Supabase Schema Out of Sync Exception] Table '${table}' exception during sync: ${e.message}. Please verify Supabase setup.`);
       } else {
         console.error(`Exception syncing ${table}:`, e);
       }
+      return false;
     }
   }
 
-  private async syncMaintenanceLogs() {
+  private async syncMaintenanceLogs(): Promise<boolean> {
     const logs: any[] = [];
     this.vehicles.forEach(v => {
       if (v.maintenanceHistory) {
@@ -515,11 +394,9 @@ export class FleetStore {
       }
     });
     if (logs.length > 0) {
-      // Differential sync for maintenance_logs might be complex without a previousState key, 
-      // but let's just push everything as they are small, or use a pseudo changed logic
-      // For now, we will push all maintenance logs, they are usually rare.
-      await this.syncTable('maintenance_logs', logs);
+      return await this.syncTable('maintenance_logs', logs);
     }
+    return true;
   }
 
   private async backgroundSync() {
@@ -529,15 +406,12 @@ export class FleetStore {
     }
     this.isSyncing = true;
     try {
-      // Find differences using getChangedItems
       const cUsers = this.getChangedItems('users', this.users);
       const cWorks = this.getChangedItems('works', this.works);
       const cEqTypes = this.getChangedItems('equipmentTypes', this.equipmentTypes);
       const cVehCats = this.getChangedItems('vehicleCategories', this.vehicleCategories);
-      
       const cVehicles = this.getChangedItems('vehicles', this.vehicles);
       const cEquipments = this.getChangedItems('equipments', this.equipments);
-      
       const cTrips = this.getChangedItems('trips', this.trips);
       const cUsages = this.getChangedItems('equipmentUsages', this.equipmentUsages);
       const cSuppliers = this.getChangedItems('suppliers', this.suppliers);
@@ -545,27 +419,20 @@ export class FleetStore {
       const cFuelDispenses = this.getChangedItems('fuelDispenses', this.fuelDispenses);
       const cLogistics = this.getChangedItems('logisticsSchedules', this.logisticsSchedules);
 
-      // Sync only changed items
-      if (cUsers.length) await this.syncTable('users', cUsers);
-      if (cWorks.length) await this.syncTable('construction_works', cWorks);
-      if (cEqTypes.length) await this.syncTable('equipment_types', cEqTypes);
-      if (cVehCats.length) await this.syncTable('vehicle_categories', cVehCats);
-      if (cSuppliers.length) await this.syncTable('suppliers', cSuppliers);
-      if (cFuelInflows.length) await this.syncTable('fuel_inflows', cFuelInflows);
-      if (cFuelDispenses.length) await this.syncTable('fuel_dispenses', cFuelDispenses);
+      if (!cUsers.length || await this.syncTable('users', cUsers)) this.updatePreviousState('users');
+      if (!cWorks.length || await this.syncTable('construction_works', cWorks)) this.updatePreviousState('works');
+      if (!cEqTypes.length || await this.syncTable('equipment_types', cEqTypes)) this.updatePreviousState('equipmentTypes');
+      if (!cVehCats.length || await this.syncTable('vehicle_categories', cVehCats)) this.updatePreviousState('vehicleCategories');
+      if (!cSuppliers.length || await this.syncTable('suppliers', cSuppliers)) this.updatePreviousState('suppliers');
+      if (!cFuelInflows.length || await this.syncTable('fuel_inflows', cFuelInflows)) this.updatePreviousState('fuelInflows');
+      if (!cFuelDispenses.length || await this.syncTable('fuel_dispenses', cFuelDispenses)) this.updatePreviousState('fuelDispenses');
+      if (!cVehicles.length || await this.syncTable('vehicles', cVehicles)) this.updatePreviousState('vehicles');
+      if (!cEquipments.length || await this.syncTable('equipments', cEquipments)) this.updatePreviousState('equipments');
+      if (!cTrips.length || await this.syncTable('trips', cTrips)) this.updatePreviousState('trips');
+      if (!cUsages.length || await this.syncTable('equipment_usages', cUsages)) this.updatePreviousState('equipmentUsages');
+      if (!cLogistics.length || await this.syncTable('logistics_schedules', cLogistics)) this.updatePreviousState('logisticsSchedules');
 
-      if (cVehicles.length) await this.syncTable('vehicles', cVehicles);
-      if (cEquipments.length) await this.syncTable('equipments', cEquipments);
-
-      if (cTrips.length) await this.syncTable('trips', cTrips);
-      if (cUsages.length) await this.syncTable('equipment_usages', cUsages);
-      if (cLogistics.length) await this.syncTable('logistics_schedules', cLogistics);
-
-      // Sync maintenance logs
       await this.syncMaintenanceLogs();
-
-      // Update the previous state snapshot after sync
-      this.updatePreviousState();
     } catch (e) {
       console.error("Exception in backgroundSync:", e);
     } finally {
@@ -578,28 +445,47 @@ export class FleetStore {
   }
 
   private constructor() {
-    this.loadState(false);
+    clearLegacyBrowserStorage();
     this.loadFromSupabase();
+    this.setupRealtimeAndPolling();
+  }
 
-    // Listen to changes from other tabs to prevent state skew and re-inserting deleted items
-    window.addEventListener('storage', (e) => {
-      if (e.key && e.key.startsWith('ff_')) {
-        this.loadState();
-        this.triggerListeners();
+  private setupRealtimeAndPolling() {
+    if (typeof window === 'undefined') return;
+
+    // 1. Consulta imediata ao retornar foco/visibilidade à aba
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.loadFromSupabase();
       }
     });
+    window.addEventListener('focus', () => {
+      this.loadFromSupabase();
+    });
 
-    // Auto-refresh when the app comes back into focus
-    if (typeof window !== 'undefined') {
-      window.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          this.loadFromSupabase();
-        }
-      });
-      window.addEventListener('focus', () => {
-        this.loadFromSupabase();
-      });
+    // 2. Atualização constante via Supabase Realtime (postgres_changes em todas as tabelas)
+    try {
+      supabase
+        .channel('frotacontrol-db-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+          if (this.realtimeDebounceTimer) {
+            clearTimeout(this.realtimeDebounceTimer);
+          }
+          this.realtimeDebounceTimer = setTimeout(() => {
+            this.loadFromSupabase();
+          }, 350);
+        })
+        .subscribe();
+    } catch (e) {
+      console.warn('Supabase Realtime channel unavailable:', e);
     }
+
+    // 3. Polling periódico de garantia (a cada 20s) enquanto a página estiver visível
+    this.pollingInterval = setInterval(() => {
+      if (document.visibilityState === 'visible' && !this.isSyncing && !this.syncQueued) {
+        this.loadFromSupabase();
+      }
+    }, 20000);
   }
 
   public static getInstance(): FleetStore {
@@ -609,126 +495,11 @@ export class FleetStore {
     return FleetStore.instance;
   }
 
-  private loadState(allowSync = true) {
-    this.users = loadFromStorage<User[]>('ff_users', INITIAL_USERS);
-    this.vehicles = loadFromStorage<Vehicle[]>('ff_vehicles', INITIAL_VEHICLES);
-    this.trips = loadFromStorage<Trip[]>('ff_trips', INITIAL_TRIPS);
-    this.equipments = loadFromStorage<Equipment[]>('ff_equipments', INITIAL_EQUIPMENTS);
-    this.equipmentUsages = loadFromStorage<EquipmentUsage[]>('ff_equipment_usages', INITIAL_EQUIPMENT_USAGES);
-    this.works = loadFromStorage<ConstructionWork[]>('ff_works', INITIAL_WORKS);
-    this.equipmentTypes = loadFromStorage<EquipmentType[]>('ff_equipment_types', INITIAL_EQUIPMENT_TYPES);
-    this.vehicleCategories = loadFromStorage<VehicleCategory[]>('ff_vehicle_categories', INITIAL_VEHICLE_CATEGORIES);
-    this.suppliers = loadFromStorage<Supplier[]>('ff_suppliers', INITIAL_SUPPLIERS);
-    this.fuelInflows = loadFromStorage<FuelInflow[]>('ff_fuel_inflows', INITIAL_FUEL_INFLOWS);
-    this.fuelDispenses = loadFromStorage<FuelDispense[]>('ff_fuel_dispenses', INITIAL_FUEL_DISPENSES);
-    this.currentUser = loadFromStorage<User | null>('ff_current_user', null);
-
-    // Dynamic backfill migration: ensure all existing users have a valid loginId, password, and isApproved fields
-    let migrated = false;
-    this.users = this.users.map(u => {
-      let changed = false;
-      let loginIdValue = u.loginId;
-      if (!loginIdValue) {
-        let prefix = '';
-        if (u.email) {
-          prefix = u.email.split('@')[0].trim().toLowerCase();
-        } else {
-          prefix = u.name.split(' ')[0].trim().toLowerCase() + '-' + u.id.replace('user-', '').substring(0, 4);
-        }
-        // Cleanup any unexpected characters from migrated loginId
-        prefix = prefix.replace(/[^a-z0-9._-]/g, '');
-        loginIdValue = prefix || 'user_' + u.id;
-        changed = true;
-      }
-
-      let passwordValue = u.password;
-      if (!passwordValue) {
-        passwordValue = '123456';
-        changed = true;
-      }
-
-      let approvedValue = u.isApproved;
-      if (approvedValue === undefined) {
-        approvedValue = true;
-        changed = true;
-      }
-
-      if (changed) {
-        migrated = true;
-        return { ...u, loginId: loginIdValue, password: passwordValue, isApproved: approvedValue };
-      }
-      return u;
-    });
-
-    // If active current user is loaded but lacks loginId, update them too
-    if (this.currentUser && !this.currentUser.loginId) {
-      migrated = true;
-      const matchedUser = this.users.find(u => u.id === this.currentUser?.id);
-      if (matchedUser) {
-        this.currentUser = matchedUser;
-      }
-    }
-
-    // Ensure default admin user exists
-    if (!this.users.some(u => u.loginId === 'admin' || u.role === 'admin')) {
-      const demoAdmin: User = {
-        id: 'user-admin-default',
-        loginId: 'admin',
-        name: 'Administrador Geral',
-        email: 'admin@frota.com.br',
-        cpf: '111.111.111-11',
-        licenseNumber: 'Não Aplicável',
-        role: 'admin',
-        isActive: true,
-        password: '123456',
-        isApproved: true,
-        createdAt: new Date().toISOString()
-      };
-      this.users.unshift(demoAdmin);
-      migrated = true;
-    }
-
-    // Ensure default demo abastecedor user exists for instant testing
-    if (!this.users.some(u => u.loginId === 'abastecedor' || u.role === 'abastecedor')) {
-      const demoAbastecedor: User = {
-        id: 'user-abastecedor-demo',
-        loginId: 'abastecedor',
-        name: 'Operador de Abastecimento',
-        email: 'abastecedor@frota.com.br',
-        cpf: '000.000.000-00',
-        licenseNumber: 'Não Aplicável',
-        role: 'abastecedor',
-        isActive: true,
-        password: '123456',
-        isApproved: true,
-        createdAt: new Date().toISOString()
-      };
-      this.users.push(demoAbastecedor);
-      migrated = true;
-    }
-
-    if (migrated && allowSync) {
-      this.saveState();
-    }
-  }
-
   private persistLocalState() {
-    saveToStorage<User[]>('ff_users', this.users);
-    saveToStorage<Vehicle[]>('ff_vehicles', this.vehicles);
-    saveToStorage<Trip[]>('ff_trips', this.trips);
-    saveToStorage<Equipment[]>('ff_equipments', this.equipments);
-    saveToStorage<EquipmentUsage[]>('ff_equipment_usages', this.equipmentUsages);
-    saveToStorage<ConstructionWork[]>('ff_works', this.works);
-    saveToStorage<EquipmentType[]>('ff_equipment_types', this.equipmentTypes);
-    saveToStorage<VehicleCategory[]>('ff_vehicle_categories', this.vehicleCategories);
-    saveToStorage<Supplier[]>('ff_suppliers', this.suppliers);
-    saveToStorage<FuelInflow[]>('ff_fuel_inflows', this.fuelInflows);
-    saveToStorage<FuelDispense[]>('ff_fuel_dispenses', this.fuelDispenses);
-    saveToStorage<User | null>('ff_current_user', this.currentUser);
+    // Nenhuma gravação em localStorage/sessionStorage: estado vive apenas em memória espelhando o Supabase.
   }
 
   private saveState() {
-    this.persistLocalState();
     this.triggerListeners();
     this.backgroundSync();
   }
@@ -813,6 +584,53 @@ export class FleetStore {
     };
   }
 
+  public async loginFromDatabase(loginId: string, password?: string): Promise<{ success: boolean; user?: User; message: string }> {
+    try {
+      const { data, error } = await supabase.from('users').select('*');
+      if (!error && data) {
+        this.users = data as User[];
+        if (!this.users.some(u => u.loginId === 'admin' || u.role === 'admin')) {
+          this.users.unshift({
+            id: 'user-admin-default',
+            loginId: 'admin',
+            name: 'Administrador Geral',
+            email: 'admin@frota.com.br',
+            cpf: '111.111.111-11',
+            licenseNumber: 'Não Aplicável',
+            role: 'admin',
+            isActive: true,
+            password: '123456',
+            isApproved: true,
+            createdAt: new Date().toISOString()
+          });
+        }
+        if (!this.users.some(u => u.loginId === 'abastecedor' || u.role === 'abastecedor')) {
+          this.users.push({
+            id: 'user-abastecedor-demo',
+            loginId: 'abastecedor',
+            name: 'Operador de Abastecimento',
+            email: 'abastecedor@frota.com.br',
+            cpf: '000.000.000-00',
+            licenseNumber: 'Não Aplicável',
+            role: 'abastecedor',
+            isActive: true,
+            password: '123456',
+            isApproved: true,
+            createdAt: new Date().toISOString()
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Falha ao consultar usuários no Supabase durante login:', e);
+    }
+
+    const result = this.login(loginId, password);
+    if (result.success) {
+      this.loadFromSupabase();
+    }
+    return result;
+  }
+
   public login(loginId: string, password?: string): { success: boolean, user?: User, message: string } {
     const normalizedLogin = loginId.trim().toLowerCase();
     const user = this.users.find(u => (u.loginId || '').toLowerCase() === normalizedLogin || (u.email && u.email.toLowerCase() === normalizedLogin));
@@ -842,7 +660,7 @@ export class FleetStore {
     }
 
     this.currentUser = user;
-    this.saveState();
+    this.triggerListeners();
     return { success: true, user, message: 'Login efetuado com sucesso.' };
   }
 
@@ -869,7 +687,7 @@ export class FleetStore {
 
   public logout() {
     this.currentUser = null;
-    this.saveState();
+    this.triggerListeners();
   }
 
   private sanitizeVehicleForSupabase(vehicle: Vehicle) {
