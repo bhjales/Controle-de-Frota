@@ -331,14 +331,22 @@ ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "originState" TEXT;
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "destinationCity" TEXT;
 ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "destinationState" TEXT;
 
+-- Atualização na tabela construction_works (Cidade e Estado/UF)
+ALTER TABLE public.construction_works ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE public.construction_works ADD COLUMN IF NOT EXISTS state TEXT;
+ALTER TABLE public.construction_works ADD COLUMN IF NOT EXISTS description TEXT;
+
 -- Atualização na tabela vehicles (Controle de Logística, Tanque e Status Ativo)
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN DEFAULT true;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "tankCapacityLiters" NUMERIC;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "hasLogisticsControl" BOOLEAN DEFAULT false;
 
--- Atualização na tabela logistics_schedules (Obra de Origem, Descrição Livre e Descrição da Carga)
+-- Atualização na tabela logistics_schedules (Obra de Origem, Origem Livre, Descrição Livre e Descrição da Carga)
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkId" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkName" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originLabel" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originCity" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originState" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "programDescription" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "cargoDescription" TEXT;
 

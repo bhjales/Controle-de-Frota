@@ -146,6 +146,7 @@ export class FleetStore {
   private previousState: Record<string, string> = {};
   private isSyncing = false;
   private syncQueued = false;
+  private hasLoadedInitial = false;
 
   // Listeners list for component re-renders
   private listeners: (() => void)[] = [];
@@ -189,7 +190,7 @@ export class FleetStore {
   }
 
   private async loadFromSupabase() {
-    if (this.isSyncing || this.syncQueued) {
+    if (this.hasLoadedInitial && (this.isSyncing || this.syncQueued)) {
       return; // Never overwrite pending local changes while sync is in flight
     }
     try {
@@ -326,6 +327,7 @@ export class FleetStore {
         }
       });
       
+      this.hasLoadedInitial = true;
       this.updatePreviousState();
       this.persistLocalState();
       this.triggerListeners();
@@ -400,6 +402,9 @@ export class FleetStore {
             }
             if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
               copy.vehicleId = null;
+            }
+            if (copy.originWorkId && !workIds.has(copy.originWorkId)) {
+              copy.originWorkId = null;
             }
           }
 
@@ -573,7 +578,7 @@ export class FleetStore {
   }
 
   private constructor() {
-    this.loadState();
+    this.loadState(false);
     this.loadFromSupabase();
 
     // Listen to changes from other tabs to prevent state skew and re-inserting deleted items
@@ -604,7 +609,7 @@ export class FleetStore {
     return FleetStore.instance;
   }
 
-  private loadState() {
+  private loadState(allowSync = true) {
     this.users = loadFromStorage<User[]>('ff_users', INITIAL_USERS);
     this.vehicles = loadFromStorage<Vehicle[]>('ff_vehicles', INITIAL_VEHICLES);
     this.trips = loadFromStorage<Trip[]>('ff_trips', INITIAL_TRIPS);
@@ -702,7 +707,7 @@ export class FleetStore {
       migrated = true;
     }
 
-    if (migrated) {
+    if (migrated && allowSync) {
       this.saveState();
     }
   }
@@ -867,14 +872,30 @@ export class FleetStore {
     this.saveState();
   }
 
-  public addVehicle(vehicleData: Omit<Vehicle, 'id' | 'createdAt' | 'status'>): { success: boolean, message: string } {
+  private sanitizeVehicleForSupabase(vehicle: Vehicle) {
+    const workIds = new Set(this.works.map(w => w.id));
+    const { maintenanceHistory: _maintenanceHistory, ...rest } = vehicle;
+    return {
+      ...rest,
+      workId: rest.workId && workIds.has(rest.workId) ? rest.workId : null,
+      workName: rest.workId && workIds.has(rest.workId) ? (rest.workName || null) : null,
+      tankCapacityLiters: rest.tankCapacityLiters ?? null,
+      maintenanceReason: rest.maintenanceReason ?? null,
+      maintenanceSentAt: rest.maintenanceSentAt ?? null,
+      isActive: rest.isActive !== undefined ? Boolean(rest.isActive) : rest.status !== 'inactive',
+      hasLogisticsControl: Boolean(rest.hasLogisticsControl),
+    };
+  }
+
+  public async addVehicle(vehicleData: Omit<Vehicle, 'id' | 'createdAt' | 'status'>): Promise<{ success: boolean; synced: boolean; message: string }> {
     const plateUpper = vehicleData.plate.trim().toUpperCase();
     if (this.vehicles.some(v => v.plate.toUpperCase() === plateUpper)) {
-      return { success: false, message: `Já existe um carro registrado com a placa ${plateUpper}.` };
+      return { success: false, synced: false, message: `Já existe um carro registrado com a placa ${plateUpper}.` };
     }
 
     const newVehicle: Vehicle = {
       ...vehicleData,
+      isActive: vehicleData.isActive !== undefined ? Boolean(vehicleData.isActive) : true,
       hasLogisticsControl: Boolean(vehicleData.hasLogisticsControl),
       id: plateUpper,
       plate: plateUpper,
@@ -883,26 +904,61 @@ export class FleetStore {
     };
 
     this.vehicles.unshift(newVehicle); // Newest first
-    this.saveState();
-    return { success: true, message: 'Veículo cadastrado adaptado com sucesso!' };
+    this.persistLocalState();
+    this.triggerListeners();
+
+    try {
+      const payload = this.sanitizeVehicleForSupabase(newVehicle);
+      const { error } = await supabase.from('vehicles').upsert(payload);
+      if (error) {
+        console.warn('Supabase addVehicle error:', error.message);
+        return {
+          success: true,
+          synced: false,
+          message: `Veículo cadastrado localmente, mas falhou ao salvar no Supabase: ${error.message}`
+        };
+      }
+      this.updatePreviousState();
+      return { success: true, synced: true, message: 'Veículo cadastrado e sincronizado no Supabase com sucesso!' };
+    } catch (e: any) {
+      return {
+        success: true,
+        synced: false,
+        message: `Veículo cadastrado localmente, mas erro de rede ao sincronizar no Supabase: ${e?.message || e}`
+      };
+    }
   }
 
-  public updateVehicle(updatedVehicle: Vehicle) {
+  public async updateVehicle(updatedVehicle: Vehicle): Promise<{ success: boolean; synced: boolean; message: string }> {
     const normalized: Vehicle = {
       ...updatedVehicle,
+      isActive: updatedVehicle.isActive !== undefined ? Boolean(updatedVehicle.isActive) : updatedVehicle.status !== 'inactive',
       hasLogisticsControl: Boolean(updatedVehicle.hasLogisticsControl)
     };
     this.vehicles = this.vehicles.map(v => v.id === normalized.id ? normalized : v);
-    this.saveState();
-    supabase
-      .from('vehicles')
-      .update({ hasLogisticsControl: normalized.hasLogisticsControl })
-      .eq('id', normalized.id)
-      .then(({ error }) => {
-        if (error) {
-          console.warn('Supabase update hasLogisticsControl failed:', error.message);
-        }
-      });
+    this.persistLocalState();
+    this.triggerListeners();
+
+    try {
+      const payload = this.sanitizeVehicleForSupabase(normalized);
+      const { error } = await supabase.from('vehicles').upsert(payload);
+      if (error) {
+        console.warn('Supabase updateVehicle error:', error.message);
+        return {
+          success: false,
+          synced: false,
+          message: `Falha ao atualizar veículo no Supabase (${normalized.plate}): ${error.message}`
+        };
+      }
+      this.updatePreviousState();
+      return { success: true, synced: true, message: 'Veículo atualizado no Supabase com sucesso!' };
+    } catch (e: any) {
+      return {
+        success: false,
+        synced: false,
+        message: `Erro ao conectar com o Supabase: ${e?.message || e}`
+      };
+    }
   }
 
   public toggleVehicleStatus(vehicleId: string, newStatus: 'available' | 'maintenance' | 'inactive') {
@@ -2121,32 +2177,65 @@ export class FleetStore {
   // CONTROLE DE LOGÍSTICA (PROGRAMAÇÃO DE VIAGENS, PERMANÊNCIAS E LOCAÇÃO)
   // ============================================================================
 
-  public toggleVehicleLogisticsControl(vehicleId: string, enabled: boolean): { success: boolean; message: string } {
+  public async toggleVehicleLogisticsControl(vehicleId: string, enabled: boolean): Promise<{ success: boolean; synced: boolean; message: string }> {
     const vehicle = this.vehicles.find(v => v.id === vehicleId);
-    if (!vehicle) return { success: false, message: 'Veículo não encontrado.' };
+    if (!vehicle) return { success: false, synced: false, message: 'Veículo não encontrado.' };
 
+    const previousFlag = Boolean(vehicle.hasLogisticsControl);
     const flag = Boolean(enabled);
-    this.vehicles = this.vehicles.map(v =>
-      v.id === vehicleId ? { ...v, hasLogisticsControl: flag } : v
-    );
-    this.saveState();
-    supabase
-      .from('vehicles')
-      .update({ hasLogisticsControl: flag })
-      .eq('id', vehicleId)
-      .then(({ error }) => {
-        if (error) {
-          console.warn(
-            `[Supabase] Falha ao atualizar hasLogisticsControl do veículo ${vehicle.plate}: ${error.message}. Execute NOTIFY pgrst, 'reload schema'; no SQL Editor do Supabase.`
-          );
-        }
-      });
-    return {
-      success: true,
-      message: flag
-        ? `Controle de Logística ativado para ${vehicle.plate}.`
-        : `Controle de Logística desativado para ${vehicle.plate}.`
-    };
+    const updatedVehicle: Vehicle = { ...vehicle, hasLogisticsControl: flag };
+    this.vehicles = this.vehicles.map(v => (v.id === vehicleId ? updatedVehicle : v));
+    this.persistLocalState();
+    this.triggerListeners();
+
+    try {
+      const { data, error } = await supabase
+        .from('vehicles')
+        .update({ hasLogisticsControl: flag })
+        .eq('id', vehicleId)
+        .select('id');
+
+      let finalError = error;
+      if (!finalError && (!data || data.length === 0)) {
+        const upsertRes = await supabase
+          .from('vehicles')
+          .upsert(this.sanitizeVehicleForSupabase(updatedVehicle));
+        finalError = upsertRes.error;
+      }
+
+      if (finalError) {
+        this.vehicles = this.vehicles.map(v =>
+          v.id === vehicleId ? { ...v, hasLogisticsControl: previousFlag } : v
+        );
+        this.persistLocalState();
+        this.triggerListeners();
+        return {
+          success: false,
+          synced: false,
+          message: `Falha ao atualizar Controle de Logística no Supabase (${vehicle.plate}): ${finalError.message}. Execute o SQL da coluna "hasLogisticsControl" e "NOTIFY pgrst, 'reload schema';" no SQL Editor do Supabase.`
+        };
+      }
+
+      this.updatePreviousState();
+      return {
+        success: true,
+        synced: true,
+        message: flag
+          ? `Controle de Logística ativado para ${vehicle.plate} e salvo no Supabase.`
+          : `Controle de Logística desativado para ${vehicle.plate} e salvo no Supabase.`
+      };
+    } catch (e: any) {
+      this.vehicles = this.vehicles.map(v =>
+        v.id === vehicleId ? { ...v, hasLogisticsControl: previousFlag } : v
+      );
+      this.persistLocalState();
+      this.triggerListeners();
+      return {
+        success: false,
+        synced: false,
+        message: `Erro ao sincronizar Controle de Logística com o Supabase (${vehicle.plate}): ${e?.message || e}`
+      };
+    }
   }
 
   public addLogisticsSchedule(data: {
