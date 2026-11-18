@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle, Pencil, Ban, CalendarRange } from 'lucide-react';
+import { Plus, Search, Trash2, Settings, PenTool, CheckCircle2, AlertTriangle, HelpCircle, Pencil, Ban, CalendarRange, Link2, Truck } from 'lucide-react';
 import { Vehicle, ConstructionWork } from '../types';
 import { FleetStore } from '../store/fleetStore';
 
@@ -26,6 +26,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
   const [selectedWorkId, setSelectedWorkId] = useState('');
   const [tankCapacity, setTankCapacity] = useState<string>('');
   const [hasLogisticsControl, setHasLogisticsControl] = useState<boolean>(false);
+  const [isComplement, setIsComplement] = useState<boolean>(false);
   const [status, setStatus] = useState<'available' | 'maintenance' | 'inactive'>('available');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -45,6 +46,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setSelectedWorkId(vehicle.workId || '');
     setTankCapacity(vehicle.tankCapacityLiters ? vehicle.tankCapacityLiters.toString() : '');
     setHasLogisticsControl(Boolean(vehicle.hasLogisticsControl));
+    setIsComplement(Boolean(vehicle.isComplement));
     setStatus(vehicle.status === 'inactive' ? 'inactive' : vehicle.status === 'maintenance' ? 'maintenance' : 'available');
     setFormError('');
     setFormSuccess('');
@@ -64,6 +66,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
     setSelectedWorkId('');
     setTankCapacity('');
     setHasLogisticsControl(false);
+    setIsComplement(false);
     setStatus('available');
     setFormError('');
     setFormSuccess('');
@@ -105,6 +108,10 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
           setFormError('Não é possível inativar um veículo enquanto ele estiver em viagem ativa. Finalize a viagem antes de inativá-lo.');
           return;
         }
+        if (editingVehicle.status === 'in_use' && isComplement !== Boolean(editingVehicle.isComplement)) {
+          setFormError('Não é possível alterar se o veículo é complemento enquanto ele estiver em viagem ativa.');
+          return;
+        }
 
         const finalStatus = editingVehicle.status === 'in_use' ? 'in_use' : status;
         const parsedTank = tankCapacity.trim() !== '' ? Number(tankCapacity) : undefined;
@@ -121,6 +128,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
           category: category,
           tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
           hasLogisticsControl,
+          isComplement,
           status: finalStatus,
           isActive: finalStatus !== 'inactive'
         };
@@ -147,7 +155,8 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
           workName: matchedWork?.name,
           category: category,
           tankCapacityLiters: parsedTank && parsedTank > 0 ? parsedTank : undefined,
-          hasLogisticsControl
+          hasLogisticsControl,
+          isComplement
         });
 
         if (result.success && result.synced !== false) {
@@ -163,6 +172,7 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
           setSelectedWorkId('');
           setTankCapacity('');
           setHasLogisticsControl(false);
+          setIsComplement(false);
 
           // Auto close form after briefly showing success
           setTimeout(() => {
@@ -456,6 +466,67 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               <p className="text-[10px] text-slate-400 mt-1 font-medium">Você pode alocar o veículo a uma obra específica para controle de checkout e roteiro, ou escolher Geral.</p>
             </div>
 
+            {/* Complement (Carroceria) Toggle Question */}
+            <div className="md:col-span-3 bg-indigo-50/40 border border-indigo-200/80 p-4 rounded-2xl space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block text-[11px] uppercase font-bold tracking-wider text-indigo-950">
+                    Veículo é um Complemento (Carroceria / Reboque)? *
+                  </label>
+                  <p className="text-[11px] text-slate-600 font-medium">
+                    Complementos (carrocerias, carretas ou reboques) só podem fazer viagem quando acoplados a um veículo principal que não seja complemento e esteja livre.
+                  </p>
+                </div>
+                <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border self-start sm:self-center whitespace-nowrap ${
+                  isComplement
+                    ? 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                    : 'bg-white text-slate-600 border-slate-200'
+                }`}>
+                  {isComplement ? 'Sim, Complemento (Carroceria)' : 'Veículo Principal'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsComplement(false)}
+                  className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                    !isComplement
+                      ? 'bg-white border-slate-800 text-slate-900 shadow-xs ring-1 ring-slate-800'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Truck className={`w-4 h-4 ${!isComplement ? 'text-slate-800' : 'text-slate-400'}`} />
+                    <div className="text-left">
+                      <span className="block font-bold">Não, Veículo Principal</span>
+                      <span className="text-[10px] font-normal text-slate-500">Realiza viagens normalmente e pode acoplar complementos</span>
+                    </div>
+                  </div>
+                  {!isComplement && <span className="text-slate-800 font-bold text-xs">Selecionado</span>}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsComplement(true)}
+                  className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                    isComplement
+                      ? 'bg-white border-indigo-600 text-indigo-950 shadow-xs ring-1 ring-indigo-600'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Link2 className={`w-4 h-4 ${isComplement ? 'text-indigo-600' : 'text-slate-400'}`} />
+                    <div className="text-left">
+                      <span className="block font-bold">Sim, é Complemento (Carroceria)</span>
+                      <span className="text-[10px] font-normal text-slate-500">Só viaja acoplado a um veículo trator disponível</span>
+                    </div>
+                  </div>
+                  {isComplement && <span className="text-indigo-600 font-bold text-xs">Selecionado</span>}
+                </button>
+              </div>
+            </div>
+
             {/* Logistics Control Toggle Question */}
             <div className="md:col-span-3 bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-2.5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -717,10 +788,18 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
               >
                 <div>
                   {/* Top line ID & Action */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 font-mono font-bold text-sm bg-slate-950 text-white rounded-lg shadow-sm">
-                      {vehicle.plate}
-                    </span>
+                  <div className="flex items-start justify-between gap-2 mb-2 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 font-mono font-bold text-sm bg-slate-950 text-white rounded-lg shadow-sm">
+                        {vehicle.plate}
+                      </span>
+                      {vehicle.isComplement && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg">
+                          <Link2 className="w-3 h-3" />
+                          Complemento (Carroceria)
+                        </span>
+                      )}
+                    </div>
                     
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold border rounded-full ${statusBg}`}>
                       {vehicle.status === 'inactive' ? (
@@ -735,7 +814,9 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                   {/* Brand & Model */}
                   <h4 className="text-lg font-bold text-slate-900 group-hover:text-emerald-700 transition-colors">
                     {vehicle.brand} <span className="font-semibold text-slate-700">{vehicle.model}</span>
-                    <span className="block text-xs font-medium text-slate-500 capitalize">{vehicle.category}</span>
+                    <span className="block text-xs font-medium text-slate-500 capitalize">
+                      {vehicle.category}{vehicle.isComplement ? ' · Complemento / Carroceria' : ''}
+                    </span>
                   </h4>
 
                   {/* Attributes details */}
@@ -902,13 +983,19 @@ export function AdminVehicles({ vehicles, store, works = [] }: AdminVehiclesProp
                     ) : (
                       <span className="text-[10px] w-full text-slate-450 font-mono flex items-center justify-center sm:justify-start gap-1.5 bg-slate-50 px-2.5 py-2 rounded border border-slate-100">
                         <PenTool className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                        Em trânsito com {
-                          (() => {
-                            const activeTrip = store.trips.find(t => t.vehicleId === vehicle.id && t.status === 'active');
-                            const driver = activeTrip ? store.users.find(u => u.id === activeTrip.driverId) : null;
-                            return driver ? driver.name : 'motorista';
-                          })()
-                        }
+                        {(() => {
+                          const activeTrip = store.trips.find(
+                            t => (t.vehicleId === vehicle.id || t.complementVehicleId === vehicle.id) && t.status === 'active'
+                          );
+                          const driver = activeTrip ? store.users.find(u => u.id === activeTrip.driverId) : null;
+                          if (activeTrip && activeTrip.complementVehicleId === vehicle.id) {
+                            return `Acoplado a ${activeTrip.vehicleModelPlate} (${driver ? driver.name : 'motorista'})`;
+                          }
+                          if (activeTrip?.complementVehicleModelPlate) {
+                            return `Em trânsito com ${driver ? driver.name : 'motorista'} + ${activeTrip.complementVehicleModelPlate}`;
+                          }
+                          return `Em trânsito com ${driver ? driver.name : 'motorista'}`;
+                        })()}
                       </span>
                     )}
                   </div>

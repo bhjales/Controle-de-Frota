@@ -776,6 +776,9 @@ export function TvDashboard({
                         {daySchedules.map(item => {
                           const plate =
                             item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
+                          const compPlate =
+                            item.complementVehicleModelPlate?.match(/\(([^)]+)\)/)?.[1] || item.complementVehicleId;
+                          const plateDisplay = compPlate ? `${plate}+${compPlate}` : plate;
                           const colorStyle =
                             scheduleColorMap.get(item.id) || SCHEDULE_COLOR_PALETTE[0];
                           const destText = item.isThirdPartyRental
@@ -787,7 +790,7 @@ export function TvDashboard({
                               className={`px-1 py-[1px] rounded border leading-[1.2] flex items-center gap-1 min-w-0 ${
                                 daySchedules.length >= 7 ? 'text-[7.5px]' : 'text-[8.5px]'
                               } ${colorStyle.chip}`}
-                              title={`${plate} | ${item.destinationLabel} (${item.destinationCity}/${item.destinationState})${
+                              title={`${plate}${compPlate ? ` + ${compPlate} (Complemento)` : ''} | ${item.destinationLabel} (${item.destinationCity}/${item.destinationState})${
                                 item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''
                               }`}
                             >
@@ -795,7 +798,7 @@ export function TvDashboard({
                                 className={`w-1.5 h-1.5 rounded-full shrink-0 ${colorStyle.dot}`}
                               />
                               <span className="truncate">
-                                <span className="font-mono font-bold">{plate}</span>
+                                <span className="font-mono font-bold">{plateDisplay}</span>
                                 {daySchedules.length < 7 && destText ? ` · ${destText}` : ''}
                               </span>
                             </div>
@@ -822,17 +825,20 @@ export function TvDashboard({
                 monthLogisticsSchedules.map(item => {
                   const plate =
                     item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
+                  const compPlate =
+                    item.complementVehicleModelPlate?.match(/\(([^)]+)\)/)?.[1] || item.complementVehicleId;
+                  const plateDisplay = compPlate ? `${plate}+${compPlate}` : plate;
                   const colorStyle =
                     scheduleColorMap.get(item.id) || SCHEDULE_COLOR_PALETTE[0];
                   return (
                     <span
                       key={item.id}
-                      className="inline-flex items-center gap-1.5 max-w-[240px]"
-                      title={`${item.vehicleModelPlate} -> ${item.destinationLabel} (${item.startDate} até ${item.endDate})`}
+                      className="inline-flex items-center gap-1.5 max-w-[260px]"
+                      title={`${item.vehicleModelPlate}${item.complementVehicleModelPlate ? ` + Complemento: ${item.complementVehicleModelPlate}` : ''} -> ${item.destinationLabel} (${item.startDate} até ${item.endDate})`}
                     >
                       <span className={`w-2.5 h-2.5 rounded-xs shrink-0 ${colorStyle.dot}`} />
                       <span className="truncate">
-                        <strong className="text-white">{plate}</strong> ·{' '}
+                        <strong className="text-white">{plateDisplay}</strong> ·{' '}
                         {item.isThirdPartyRental
                           ? item.thirdPartyName || item.destinationLabel
                           : item.workName || item.destinationLabel}
@@ -1292,11 +1298,18 @@ export function TvDashboard({
                     key={trip.id}
                     className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col justify-between gap-2 min-h-0 overflow-hidden"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-blue-600 text-white truncate">
-                        {trip.vehicleModelPlate}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono tabular-nums shrink-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 space-y-1">
+                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-blue-600 text-white block truncate">
+                          {trip.vehicleModelPlate}
+                        </span>
+                        {trip.complementVehicleModelPlate && (
+                          <span className="font-mono font-bold text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 block truncate">
+                            + Comp.: {trip.complementVehicleModelPlate}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 font-mono tabular-nums shrink-0 pt-0.5">
                         {trip.checkIn.time}
                       </span>
                     </div>

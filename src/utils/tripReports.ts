@@ -4,13 +4,16 @@ import {
   Trip, 
   ConstructionWork, 
   Vehicle, 
-  User 
+  User,
+  LogisticsSchedule
 } from '../types';
+import { compareTripWithPlanned, formatIsoDateToBR } from './tripComparison';
 
 export interface TripReportOptions {
   trips: Trip[];
   works: ConstructionWork[];
   vehicles: Vehicle[];
+  logisticsSchedules?: LogisticsSchedule[];
   currentUser?: User | null;
   selectedVehicleId?: string; // 'all' or vehicleId
   selectedWorkId?: string;    // 'all' or workId
@@ -36,9 +39,9 @@ export function getFilteredTripData(options: TripReportOptions): Trip[] {
 
   let filtered = [...trips];
 
-  // Filter by Vehicle
+  // Filter by Vehicle (primary or coupled complement)
   if (selectedVehicleId && selectedVehicleId !== 'all') {
-    filtered = filtered.filter(t => t.vehicleId === selectedVehicleId);
+    filtered = filtered.filter(t => t.vehicleId === selectedVehicleId || t.complementVehicleId === selectedVehicleId);
   }
 
   // Filter by Construction Work (Obra)
@@ -69,6 +72,7 @@ export function getFilteredTripData(options: TripReportOptions): Trip[] {
     filtered = filtered.filter(t => 
       t.driverName.toLowerCase().includes(q) ||
       t.vehicleModelPlate.toLowerCase().includes(q) ||
+      (t.complementVehicleModelPlate && t.complementVehicleModelPlate.toLowerCase().includes(q)) ||
       (t.checkIn.origin && t.checkIn.origin.toLowerCase().includes(q)) ||
       (t.originCity && t.originCity.toLowerCase().includes(q)) ||
       (t.originState && t.originState.toLowerCase().includes(q)) ||
@@ -93,6 +97,7 @@ export function exportTripReportPDF(options: TripReportOptions) {
   const { 
     works, 
     vehicles, 
+    logisticsSchedules,
     currentUser, 
     selectedVehicleId, 
     selectedWorkId, 
@@ -521,7 +526,7 @@ export function exportTripReportPDF(options: TripReportOptions) {
       trip.id.replace('trip-', '').substring(0, 8).toUpperCase(),
       dtInicio,
       trip.driverName,
-      trip.vehicleModelPlate,
+      trip.complementVehicleModelPlate ? `${trip.vehicleModelPlate}\n+ Comp.: ${trip.complementVehicleModelPlate}` : trip.vehicleModelPlate,
       trip.workName || 'Geral',
       route,
       `${kmInitial} / ${kmFinal}`,
@@ -569,6 +574,111 @@ export function exportTripReportPDF(options: TripReportOptions) {
     margin: { top: 22, left: 12, right: 12, bottom: 18 }
   });
 
+  // SECTION 4: Comparativo Programado (Logística) vs Executado
+  const comparedEntries = filteredTrips
+    .map(trip => ({
+      trip,
+      comp: compareTripWithPlanned(trip, logisticsSchedules)
+    }))
+    .filter((entry): entry is { trip: Trip; comp: NonNullable<ReturnType<typeof compareTripWithPlanned>> } => Boolean(entry.comp));
+
+  if (comparedEntries.length > 0) {
+    const finalYSection3 = (doc as any).lastAutoTable.finalY + 8;
+    const startYComp = finalYSection3 < 168 ? finalYSection3 : (() => {
+      doc.addPage();
+      drawDecorations(doc.getNumberOfPages());
+      return 24;
+    })();
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(30, 41, 59);
+    doc.text('4. Comparativo: Programado pela Logística vs Executado pelo Motorista', 12, startYComp);
+
+    const compRows = comparedEntries.map(({ trip, comp }) => {
+      const p = comp.planned;
+      const progVehicle = p.complementVehicleModelPlate
+        ? `${p.vehicleModelPlate}\n+ ${p.complementVehicleModelPlate}`
+        : p.vehicleModelPlate;
+      const execVehicle = trip.complementVehicleModelPlate
+        ? `${trip.vehicleModelPlate}\n+ ${trip.complementVehicleModelPlate}`
+        : trip.vehicleModelPlate;
+      const progDest = `${p.workName || p.destinationLabel} (${p.destinationCity}/${p.destinationState})`;
+      const execDest = `${trip.workName ? `${trip.workName} · ` : ''}${trip.checkIn.destination} (${trip.destinationCity || trip.checkIn.destinationCity || '-'}/${trip.destinationState || trip.checkIn.destinationState || '-'})`;
+      const progPeriod = `${formatIsoDateToBR(p.startDate)} a ${formatIsoDateToBR(p.endDate)}`;
+      const execPeriod = comp.actualEndDate
+        ? `${formatIsoDateToBR(comp.actualStartDate)} a ${formatIsoDateToBR(comp.actualEndDate)}`
+        : `${formatIsoDateToBR(comp.actualStartDate)} (Em curso)`;
+      const statusText = trip.status === 'active'
+        ? 'Em Execução'
+        : comp.isFullyCompliant
+        ? '100% Conforme'
+        : `Divergente (${comp.divergences.length})`;
+
+      return [
+        trip.driverName,
+        progVehicle,
+        execVehicle,
+        progDest,
+        execDest,
+        progPeriod,
+        execPeriod,
+        trip.status === 'completed' ? `${(trip.kmDriven || 0).toLocaleString('pt-BR')} km` : '-',
+        statusText,
+        comp.isFullyCompliant ? 'Sem divergências' : comp.divergences.join('; ')
+      ];
+    });
+
+    autoTable(doc, {
+      startY: startYComp + 4,
+      head: [[
+        'MOTORISTA',
+        'VEÍCULO PROGRAMADO',
+        'VEÍCULO EXECUTADO',
+        'DESTINO PROGRAMADO',
+        'DESTINO EXECUTADO',
+        'PERÍODO PROG.',
+        'EXECUÇÃO REAL',
+        'DISTÂNCIA',
+        'RESULTADO',
+        'DIVERGÊNCIAS'
+      ]],
+      body: compRows,
+      headStyles: {
+        fillColor: [30, 41, 59],
+        textColor: [255, 255, 255],
+        fontSize: 6.4,
+        fontStyle: 'bold'
+      },
+      styles: {
+        fontSize: 6,
+        cellPadding: 1.8,
+        font: 'helvetica'
+      },
+      columnStyles: {
+        0: { cellWidth: 24 },
+        1: { cellWidth: 30 },
+        2: { cellWidth: 30 },
+        3: { cellWidth: 34 },
+        4: { cellWidth: 34 },
+        5: { cellWidth: 23 },
+        6: { cellWidth: 23 },
+        7: { cellWidth: 16, halign: 'right' },
+        8: { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+        9: { cellWidth: 37 }
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252]
+      },
+      didDrawPage: (data) => {
+        if (data.pageNumber > 1) {
+          drawDecorations(data.pageNumber);
+        }
+      },
+      margin: { top: 22, left: 12, right: 12, bottom: 18 }
+    });
+  }
+
   // Filename generation
   const fileDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const vehicleTag = selectedVehicleObj ? `_veiculo_${selectedVehicleObj.plate.replace(/[^a-zA-Z0-9]/g, '')}` : '';
@@ -606,7 +716,7 @@ function downloadCSVFile(csvContent: string, filename: string) {
  * Exports a comprehensive CSV spreadsheet containing Trips
  */
 export function exportTripsConsolidatedCSV(options: TripReportOptions) {
-  const { works, vehicles } = options;
+  const { vehicles, logisticsSchedules } = options;
   const filteredTrips = getFilteredTripData(options);
 
   const lines: string[] = [];
@@ -627,6 +737,7 @@ export function exportTripsConsolidatedCSV(options: TripReportOptions) {
     'Email Condutor',
     'Veiculo Modelo',
     'Placa',
+    'Complemento / Carroceria',
     'Canteiro Obra',
     'Origem (Local)',
     'Municipio Origem',
@@ -641,11 +752,20 @@ export function exportTripsConsolidatedCSV(options: TripReportOptions) {
     'Nivel Combustivel Partida',
     'Nivel Combustivel Chegada',
     'Finalidade / Motivo',
-    'Observacoes'
+    'Observacoes',
+    'Programada pela Logistica',
+    'Periodo Programado',
+    'Veiculo Programado',
+    'Complemento Programado',
+    'Destino Programado',
+    'Comparativo Conformidade',
+    'Divergencias Identificadas'
   ].map(escapeCSV).join(';'));
 
   filteredTrips.forEach(t => {
     const veh = vehicles.find(v => v.id === t.vehicleId);
+    const comp = compareTripWithPlanned(t, logisticsSchedules);
+    const p = comp?.planned;
     lines.push([
       t.id,
       t.createdAt,
@@ -655,6 +775,7 @@ export function exportTripsConsolidatedCSV(options: TripReportOptions) {
       t.driverEmail || '',
       veh?.model || t.vehicleModelPlate,
       veh?.plate || '',
+      t.complementVehicleModelPlate || '',
       t.workName || 'Geral',
       t.checkIn.origin || 'Escritório Central',
       t.originCity || t.checkIn.originCity || 'Palmas',
@@ -669,7 +790,14 @@ export function exportTripsConsolidatedCSV(options: TripReportOptions) {
       t.checkIn.fuel,
       t.checkOut?.fuel || '',
       t.checkIn.reason,
-      t.checkIn.observations || ''
+      t.checkIn.observations || '',
+      p ? 'Sim' : 'Não',
+      p ? `${formatIsoDateToBR(p.startDate)} a ${formatIsoDateToBR(p.endDate)}` : '',
+      p?.vehicleModelPlate || '',
+      p?.complementVehicleModelPlate || '',
+      p ? `${p.workName || p.destinationLabel} (${p.destinationCity}/${p.destinationState})` : '',
+      comp ? (comp.isFullyCompliant ? '100% Conforme' : `Divergente (${comp.divergences.length})`) : '',
+      comp ? (comp.isFullyCompliant ? 'Sem divergências' : comp.divergences.join('; ')) : ''
     ].map(escapeCSV).join(';'));
   });
 

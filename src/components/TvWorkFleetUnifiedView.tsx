@@ -73,11 +73,11 @@ export function TvWorkFleetUnifiedView({
         return {
           id: `v-${v.id}`,
           kind: 'vehicle',
-          code: v.plate,
+          code: v.isComplement ? `COMP·${v.plate}` : v.plate,
           name: v.model,
           statusLabel: st.label,
           statusCls: st.cls,
-          tooltip: `${v.plate} - ${v.brand} ${v.model} (${v.currentKm.toLocaleString('pt-BR')} km)`
+          tooltip: `${v.plate}${v.isComplement ? ' [Complemento / Carroceria]' : ''} - ${v.brand} ${v.model} (${v.currentKm.toLocaleString('pt-BR')} km)`
         };
       });
 

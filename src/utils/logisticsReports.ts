@@ -255,10 +255,13 @@ export function exportLogisticsPDF(options: LogisticsReportOptions) {
       : s.workId
       ? 'Obra Vinculada'
       : 'Destino Livre';
+    const vehicleFullStr = s.complementVehicleModelPlate
+      ? `${s.vehicleModelPlate}\n+ Comp.: ${s.complementVehicleModelPlate}`
+      : s.vehicleModelPlate;
     return [
       `${formatDateBR(s.startDate)} a\n${formatDateBR(s.endDate)}`,
       `${days}d`,
-      s.vehicleModelPlate,
+      vehicleFullStr,
       formatOriginText(s),
       formatDestText(s),
       tipoStr,
@@ -361,7 +364,11 @@ export function exportLogisticsPDF(options: LogisticsReportOptions) {
       days: 0,
     };
     entry.count += 1;
-    entry.vehicles.add(s.vehicleModelPlate);
+    entry.vehicles.add(
+      s.complementVehicleModelPlate
+        ? `${s.vehicleModelPlate} + ${s.complementVehicleModelPlate}`
+        : s.vehicleModelPlate
+    );
     entry.days += getDaysDiff(s.startDate, s.endDate);
     destSummaryMap.set(key, entry);
   });
@@ -435,11 +442,13 @@ export function exportLogisticsPDF(options: LogisticsReportOptions) {
           const summary = dayMatches
             .map(item => {
               const plate = item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleModelPlate;
+              const compPlate = item.complementVehicleModelPlate?.match(/\(([^)]+)\)/)?.[1] || item.complementVehicleModelPlate;
+              const fullPlate = compPlate ? `${plate}+${compPlate}` : plate;
               const dest = item.isThirdPartyRental
                 ? `Locado: ${item.thirdPartyName || item.destinationLabel}`
                 : item.workName || item.destinationLabel;
               const cargo = item.cargoDescription ? ` [Carga: ${item.cargoDescription}]` : '';
-              return `${plate} -> ${dest} (${item.destinationCity}/${item.destinationState})${cargo}`;
+              return `${fullPlate} -> ${dest} (${item.destinationCity}/${item.destinationState})${cargo}`;
             })
             .join(' | ');
           dailyRows.push([
@@ -534,6 +543,7 @@ export function exportLogisticsCSV(options: LogisticsReportOptions) {
       'Duracao (Dias)',
       'Status',
       'Veiculo / Placa',
+      'Complemento / Carroceria',
       'Origem (Obra / Local)',
       'Municipio Origem',
       'UF Origem',
@@ -568,6 +578,7 @@ export function exportLogisticsCSV(options: LogisticsReportOptions) {
         days,
         STATUS_LABELS[s.scheduleStatus] || s.scheduleStatus,
         s.vehicleModelPlate,
+        s.complementVehicleModelPlate || '',
         s.originWorkName || s.originLabel || 'Matriz / Base',
         s.originCity || '',
         s.originState || '',

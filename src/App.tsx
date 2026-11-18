@@ -377,6 +377,7 @@ export default function App() {
                 currentUser={currentUser}
                 store={store}
                 works={works}
+                logisticsSchedules={logisticsSchedules}
               />
             )}
 
@@ -441,6 +442,7 @@ export default function App() {
                 trips={trips}
                 currentUser={currentUser}
                 store={store}
+                logisticsSchedules={logisticsSchedules}
               />
             )}
 

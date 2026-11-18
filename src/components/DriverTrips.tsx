@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Play, CheckCircle, Navigation, MapPin, Compass, AlertCircle, Fuel, Calendar, Gauge, FileText, ArrowRight, Hourglass } from 'lucide-react';
-import { Vehicle, Trip, User, ConstructionWork } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Play, CheckCircle, Navigation, MapPin, Compass, AlertCircle, Fuel, Calendar, Gauge, FileText, ArrowRight, Hourglass, Link2, CalendarRange, Package, X } from 'lucide-react';
+import { Vehicle, Trip, User, ConstructionWork, LogisticsSchedule } from '../types';
 import { FleetStore } from '../store/fleetStore';
+import { formatIsoDateToBR } from '../utils/tripComparison';
 
 interface DriverTripsProps {
   vehicles: Vehicle[];
@@ -9,6 +10,7 @@ interface DriverTripsProps {
   currentUser: User | null;
   store: FleetStore;
   works: ConstructionWork[];
+  logisticsSchedules?: LogisticsSchedule[];
 }
 
 const BRAZILIAN_UFS = [
@@ -17,7 +19,7 @@ const BRAZILIAN_UFS = [
   'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ];
 
-export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }: DriverTripsProps) {
+export function DriverTrips({ vehicles, trips, currentUser, store, works = [], logisticsSchedules = [] }: DriverTripsProps) {
   const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
 
   // Check if current user has an active trip
@@ -30,8 +32,28 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
     }
   }, [trips, currentUser]);
 
+  // Scheduled Logistics trips assigned to the current driver and not yet started
+  const scheduledTripsForDriver = useMemo(() => {
+    if (!currentUser) return [];
+    const linkedScheduleIds = new Set(
+      trips.map(t => t.logisticsScheduleId).filter((id): id is string => Boolean(id))
+    );
+    return logisticsSchedules
+      .filter(
+        s =>
+          s.driverId === currentUser.id &&
+          (s.scheduleStatus === 'programado' || s.scheduleStatus === 'em_andamento') &&
+          !linkedScheduleIds.has(s.id)
+      )
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }, [logisticsSchedules, trips, currentUser]);
+
   // --- CHECK-IN FORM STATES ---
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
+  const skipVehicleAutofillRef = useRef(false);
+  const checkInFormRef = useRef<HTMLDivElement>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [selectedComplementId, setSelectedComplementId] = useState('');
   const [checkInKm, setCheckInKm] = useState<number | ''>('');
   const [checkInFuel, setCheckInFuel] = useState('1/2');
   const [selectedWorkId, setSelectedWorkId] = useState('');
@@ -53,12 +75,27 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Pre-fill Km and Admin pre-allocation when vehicle changes
+  // Pre-fill Km and Admin pre-allocation when vehicle changes (unless prefilled by Logistics Schedule)
   useEffect(() => {
+    if (skipVehicleAutofillRef.current) {
+      skipVehicleAutofillRef.current = false;
+      const veh = vehicles.find(v => v.id === selectedVehicleId);
+      if (veh) {
+        setCheckInKm(veh.currentKm);
+      }
+      setErrorMsg('');
+      return;
+    }
+
     if (selectedVehicleId) {
       const veh = vehicles.find(v => v.id === selectedVehicleId);
       if (veh) {
         setCheckInKm(veh.currentKm);
+        if (selectedScheduleId) {
+          // Keep Logistics route/destination fields when driver picks a substitute vehicle
+          setErrorMsg('');
+          return;
+        }
         if (veh.workId) {
           setSelectedWorkId(veh.workId);
           const matchedWork = works.find(w => w.id === veh.workId);
@@ -90,7 +127,7 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
           setReason('');
         }
       }
-    } else {
+    } else if (!selectedScheduleId) {
       setCheckInKm('');
       setSelectedWorkId('');
       setOrigin('Garagem Central (Geral)');
@@ -102,7 +139,76 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       setReason('');
     }
     setErrorMsg('');
-  }, [selectedVehicleId, vehicles, works]);
+  }, [selectedVehicleId, vehicles, works, selectedScheduleId]);
+
+  const handleSelectScheduledTrip = (sched: LogisticsSchedule) => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    skipVehicleAutofillRef.current = true;
+    setSelectedScheduleId(sched.id);
+
+    const schedVeh = vehicles.find(v => v.id === sched.vehicleId);
+    const isVehAvailable =
+      schedVeh &&
+      !schedVeh.isComplement &&
+      schedVeh.isActive !== false &&
+      schedVeh.status === 'available' &&
+      !activeTripAssetIds.has(schedVeh.id);
+
+    if (isVehAvailable && schedVeh) {
+      setSelectedVehicleId(schedVeh.id);
+      setCheckInKm(schedVeh.currentKm);
+    } else {
+      setSelectedVehicleId('');
+      setCheckInKm('');
+    }
+
+    const schedComp = sched.complementVehicleId
+      ? vehicles.find(v => v.id === sched.complementVehicleId)
+      : undefined;
+    const isCompAvailable =
+      schedComp &&
+      Boolean(schedComp.isComplement) &&
+      schedComp.isActive !== false &&
+      schedComp.status === 'available' &&
+      !activeTripAssetIds.has(schedComp.id);
+
+    setSelectedComplementId(isCompAvailable && schedComp ? schedComp.id : '');
+    setSelectedWorkId(sched.workId || '');
+    setOrigin(sched.originWorkName || sched.originLabel || 'Garagem Central (Geral)');
+    setOriginCity(sched.originCity || 'Palmas');
+    setOriginState(sched.originState || 'TO');
+    setDestination(sched.workName || sched.destinationLabel || '');
+    setDestinationCity(sched.destinationCity || '');
+    setDestinationState(sched.destinationState || '');
+    setReason(
+      sched.cargoDescription
+        ? `Logística: ${sched.cargoDescription}`
+        : `Viagem programada pela logística: ${sched.workName || sched.destinationLabel}`
+    );
+    setCheckInObs(sched.notes || '');
+
+    setTimeout(() => {
+      checkInFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  const handleClearScheduledSelection = () => {
+    setSelectedScheduleId(null);
+    setSelectedVehicleId('');
+    setSelectedComplementId('');
+    setCheckInKm('');
+    setSelectedWorkId('');
+    setOrigin('Garagem Central (Geral)');
+    setOriginCity('Palmas');
+    setOriginState('TO');
+    setDestination('');
+    setDestinationCity('');
+    setDestinationState('');
+    setReason('');
+    setCheckInObs('');
+    setErrorMsg('');
+  };
 
   // Pre-fill checkout Km with active trip initial Km + 10 (reasonable guess)
   useEffect(() => {
@@ -155,23 +261,31 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
       return;
     }
 
-    const res = store.checkInTrip(selectedVehicleId, {
-      km: Number(checkInKm),
-      fuel: checkInFuel,
-      origin: origin.trim(),
-      originCity: originCity.trim(),
-      originState: originState.trim().toUpperCase(),
-      destination: destination.trim(),
-      destinationCity: destinationCity.trim(),
-      destinationState: destinationState.trim().toUpperCase(),
-      reason: reason.trim(),
-      observations: checkInObs.trim()
-    }, selectedWorkId || undefined);
+    const res = store.checkInTrip(
+      selectedVehicleId,
+      {
+        km: Number(checkInKm),
+        fuel: checkInFuel,
+        origin: origin.trim(),
+        originCity: originCity.trim(),
+        originState: originState.trim().toUpperCase(),
+        destination: destination.trim(),
+        destinationCity: destinationCity.trim(),
+        destinationState: destinationState.trim().toUpperCase(),
+        reason: reason.trim(),
+        observations: checkInObs.trim()
+      },
+      selectedWorkId || undefined,
+      selectedComplementId || undefined,
+      selectedScheduleId || undefined
+    );
 
     if (res.success) {
       setSuccessMsg(res.message);
       // Reset CheckIn states
+      setSelectedScheduleId(null);
       setSelectedVehicleId('');
+      setSelectedComplementId('');
       setCheckInKm('');
       setCheckInFuel('1/2');
       setSelectedWorkId('');
@@ -227,7 +341,38 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
     }
   };
 
-  const availableVehicles = vehicles.filter(v => v.status === 'available' && (currentUser?.role === 'admin' || currentUser?.authorizedAssetIds?.includes(v.id)));
+  const activeTripAssetIds = new Set<string>();
+  trips
+    .filter(t => t.status === 'active')
+    .forEach(t => {
+      if (t.vehicleId) activeTripAssetIds.add(t.vehicleId);
+      if (t.complementVehicleId) activeTripAssetIds.add(t.complementVehicleId);
+    });
+
+  const scheduledVehicleIdsForDriver = new Set(scheduledTripsForDriver.map(s => s.vehicleId));
+
+  const availableVehicles = vehicles.filter(
+    v =>
+      !v.isComplement &&
+      v.isActive !== false &&
+      v.status === 'available' &&
+      !activeTripAssetIds.has(v.id) &&
+      (currentUser?.role === 'admin' ||
+        currentUser?.authorizedAssetIds?.includes(v.id) ||
+        scheduledVehicleIdsForDriver.has(v.id))
+  );
+
+  const selectedSchedule = selectedScheduleId
+    ? scheduledTripsForDriver.find(s => s.id === selectedScheduleId) || null
+    : null;
+
+  const availableComplements = vehicles.filter(
+    v =>
+      Boolean(v.isComplement) &&
+      v.isActive !== false &&
+      v.status === 'available' &&
+      !activeTripAssetIds.has(v.id)
+  );
 
   // List of suggested municipalities from registered works + central base
   const suggestedCities = Array.from(
@@ -258,11 +403,16 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
         </div>
         
         {activeTrip && (
-          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-xs flex items-center gap-3 animate-pulse shrink-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-450 block shrink-0"></span>
+          <div className="bg-slate-800/60 border border-slate-700/60 rounded-xl px-4 py-3 text-xs flex items-center gap-3 shrink-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-400 block shrink-0"></span>
             <div>
               <p className="font-semibold text-slate-250">Veículo Alocado Atualmente:</p>
               <p className="font-mono text-[11px] text-blue-400">{activeTrip.vehicleModelPlate}</p>
+              {activeTrip.complementVehicleModelPlate && (
+                <p className="font-mono text-[11px] text-indigo-300 mt-0.5">
+                  + Complemento: {activeTrip.complementVehicleModelPlate}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -270,15 +420,161 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
 
       {/* Main Form container based on trip state */}
       {!activeTrip ? (
-        /* --- VIEW A: REALIZAR CHECK-IN (INICIAR VIAGEM) --- */
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm animate-fade-in space-y-6">
-          <div className="border-b border-slate-100 pb-4">
-            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 font-display">
-              <Play className="w-5 h-5 text-blue-600 animate-pulse" />
-              1. Check-In de Nova Saída de Veículo
-            </h3>
-            <p className="text-sm text-slate-550 mt-0.5 font-medium">Preencha os dados de saída do veículo antes de partir nas rodovias.</p>
-          </div>
+        <div className="space-y-6">
+          {/* SCHEDULED LOGISTICS TRIPS FOR DRIVER */}
+          {scheduledTripsForDriver.length > 0 && (
+            <div className="bg-white border border-blue-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-100">
+                    <CalendarRange className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 font-display">
+                      Viagens Programadas pela Logística ({scheduledTripsForDriver.length})
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Selecione uma viagem programada para preencher o check-in automaticamente e iniciar o trajeto.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                {scheduledTripsForDriver.map(sched => {
+                  const isSelected = selectedScheduleId === sched.id;
+                  const schedVeh = vehicles.find(v => v.id === sched.vehicleId);
+                  const isVehAvail =
+                    schedVeh &&
+                    !schedVeh.isComplement &&
+                    schedVeh.isActive !== false &&
+                    schedVeh.status === 'available' &&
+                    !activeTripAssetIds.has(schedVeh.id);
+                  return (
+                    <div
+                      key={sched.id}
+                      className={`rounded-2xl border p-4 flex flex-col justify-between gap-3 transition-all ${
+                        isSelected
+                          ? 'bg-blue-50/70 border-blue-500 ring-2 ring-blue-500/20'
+                          : 'bg-slate-50/70 border-slate-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-600 text-white">
+                                Programado Logística
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-white border border-slate-200 text-slate-700">
+                                {formatIsoDateToBR(sched.startDate)} → {formatIsoDateToBR(sched.endDate)}
+                              </span>
+                              {sched.workName && (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  Obra: {sched.workName}
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-sm font-bold text-slate-900 truncate">
+                              {sched.vehicleModelPlate}
+                            </h4>
+                            {sched.complementVehicleModelPlate && (
+                              <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1">
+                                <Link2 className="w-3.5 h-3.5 shrink-0" />
+                                + Complemento: {sched.complementVehicleModelPlate}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="bg-white border border-slate-200/80 rounded-xl px-3 py-2 text-xs space-y-1">
+                          <div className="flex items-center gap-1.5 text-slate-700">
+                            <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <span className="truncate">
+                              <strong>Origem:</strong> {sched.originWorkName || sched.originLabel || 'Matriz / Base'} ({sched.originCity || 'Palmas'}/{sched.originState || 'TO'})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-slate-900">
+                            <Navigation className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate">
+                              <strong>Destino:</strong> {sched.workName || sched.destinationLabel} ({sched.destinationCity}/{sched.destinationState})
+                            </span>
+                          </div>
+                          {sched.cargoDescription && (
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                              <Package className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <span className="truncate">
+                                <strong>Carga:</strong> {sched.cargoDescription}
+                              </span>
+                            </div>
+                          )}
+                          {sched.notes && (
+                            <p className="text-[11px] text-slate-500 italic pt-0.5">Obs.: {sched.notes}</p>
+                          )}
+                        </div>
+
+                        {!isVehAvail && (
+                          <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 font-medium">
+                            O veículo programado ({sched.vehicleModelPlate}) está no momento em{' '}
+                            {schedVeh?.status === 'in_use' ? 'outra viagem' : schedVeh?.status === 'maintenance' ? 'manutenção' : 'indisponível'}. Você pode iniciar selecionando outro veículo disponível no check-in.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectScheduledTrip(sched)}
+                          className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                          {isSelected ? 'Carregada no Check-In' : 'Iniciar com Check-In'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* --- VIEW A: REALIZAR CHECK-IN (INICIAR VIAGEM) --- */}
+          <div ref={checkInFormRef} className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm animate-fade-in space-y-6">
+            <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 font-display">
+                  <Play className="w-5 h-5 text-blue-600" />
+                  1. Check-In de Nova Saída de Veículo
+                </h3>
+                <p className="text-sm text-slate-550 mt-0.5 font-medium">Preencha os dados de saída do veículo antes de partir nas rodovias.</p>
+              </div>
+            </div>
+
+            {selectedSchedule && (
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5 text-xs">
+                  <span className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <CalendarRange className="w-4 h-4 text-blue-600" />
+                    Iniciando Viagem Programada pela Logística
+                  </span>
+                  <p className="text-blue-800">
+                    Destino: <strong>{selectedSchedule.workName || selectedSchedule.destinationLabel}</strong> ({selectedSchedule.destinationCity}/{selectedSchedule.destinationState}) · Período: <strong>{formatIsoDateToBR(selectedSchedule.startDate)} a {formatIsoDateToBR(selectedSchedule.endDate)}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleClearScheduledSelection}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-800 bg-white hover:bg-blue-100 border border-blue-200 rounded-xl cursor-pointer shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Desvincular Programação
+                </button>
+              </div>
+            )}
 
           <form id="checkin_trip_form" onSubmit={handleCheckInSubmit} className="space-y-6">
             {/* Auto-suggested municipalities datalist */}
@@ -292,16 +588,19 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
               
               {/* Vehicle Selection Block */}
               <div className="space-y-1.5">
-                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Selecione o Veículo Disponível *</label>
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-slate-500 mb-1.5">Selecione o Veículo Principal (Não Complemento) *</label>
                 {availableVehicles.length === 0 ? (
                   <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl flex items-start gap-2.5">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>Nenhum carro disponível no pátio atualmente. Todos estão em uso ou em manutenção. Solicite a liberação de um veículo a um Admin.</span>
+                    <span>Nenhum veículo trator disponível no pátio atualmente. Todos estão em uso ou em manutenção. Solicite a liberação de um veículo a um Admin.</span>
                   </div>
                 ) : (
                   <select
                     value={selectedVehicleId}
-                    onChange={(e) => setSelectedVehicleId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedVehicleId(e.target.value);
+                      if (!e.target.value) setSelectedComplementId('');
+                    }}
                     className="w-full text-sm bg-[#F8FAFC] hover:bg-slate-100/50 border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl px-4 py-3 outline-none transition-all cursor-pointer font-medium"
                     required
                   >
@@ -313,6 +612,32 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
                     ))}
                   </select>
                 )}
+              </div>
+
+              {/* Complement Coupling Selection Block */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-indigo-700 mb-1.5 flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5" />
+                  Acoplar Complemento / Carroceria (Opcional)
+                </label>
+                <select
+                  value={selectedComplementId}
+                  onChange={(e) => setSelectedComplementId(e.target.value)}
+                  disabled={!selectedVehicleId || availableComplements.length === 0}
+                  className="w-full text-sm bg-indigo-50/40 hover:bg-indigo-50/70 disabled:bg-slate-100 disabled:text-slate-400 border border-indigo-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-3 outline-none transition-all cursor-pointer font-medium"
+                >
+                  <option value="">-- Sem complemento acoplado --</option>
+                  {availableComplements.map((comp) => (
+                    <option key={comp.id} value={comp.id}>
+                      {comp.brand} {comp.model} - [ {comp.plate} ]{comp.category ? ` (${comp.category})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <span className="text-[10px] text-slate-500 block">
+                  {availableComplements.length === 0 && vehicles.some(v => v.isComplement)
+                    ? 'Nenhum complemento livre no pátio (em viagem ativa, manutenção ou inativo).'
+                    : 'Complementos (carrocerias) só viajam acoplados a veículos que não sejam complemento e que não estejam em outra viagem.'}
+                </span>
               </div>
 
               {/* Initial Km property */}
@@ -574,18 +899,19 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
                 disabled={availableVehicles.length === 0}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-sm active:scale-95 select-none text-sm disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
               >
-                Iniciar Saída (Fazer Check-In)
+                {selectedSchedule ? 'Iniciar Viagem Programada (Check-In)' : 'Iniciar Saída (Fazer Check-In)'}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </form>
+        </div>
         </div>
       ) : (
         /* --- VIEW B: REALIZAR CHECK-OUT (CONCLUIR VIAGEM) --- */
         <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm animate-fade-in space-y-6">
           <div className="border-b border-slate-100 pb-4">
             <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2 font-display">
-              <CheckCircle className="w-5 h-5 text-blue-600 animate-pulse" />
+              <CheckCircle className="w-5 h-5 text-blue-600" />
               2. Check-Out e Encerramento de Viagem
             </h3>
             <p className="text-sm text-slate-550 mt-0.5 font-medium">Informe os dados de recebimento do veículo ao finalizar o percurso.</p>
@@ -595,6 +921,11 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
             <div className="space-y-0.5">
               <span className="text-[9px] uppercase font-bold text-blue-500 block tracking-wider font-mono">Veículo do Trajeto</span>
               <p className="text-sm font-bold text-blue-900 leading-tight">{activeTrip.vehicleModelPlate}</p>
+              {activeTrip.complementVehicleModelPlate && (
+                <p className="text-xs font-bold text-indigo-700 leading-tight pt-1">
+                  + Complemento: {activeTrip.complementVehicleModelPlate}
+                </p>
+              )}
             </div>
             <div className="space-y-0.5">
               <span className="text-[9px] uppercase font-bold text-blue-500 block tracking-wider font-mono">Rota (Origem / Destino)</span>
@@ -624,6 +955,35 @@ export function DriverTrips({ vehicles, trips, currentUser, store, works = [] }:
               </p>
             </div>
           </div>
+
+          {activeTrip.plannedSnapshot && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-1.5">
+              <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                <CalendarRange className="w-4 h-4 text-blue-600" />
+                <span>Viagem Vinculada à Programação Logística</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-slate-600">
+                <div>
+                  <span className="font-semibold text-slate-800">Programado:</span>{' '}
+                  {activeTrip.plannedSnapshot.vehicleModelPlate}
+                  {activeTrip.plannedSnapshot.complementVehicleModelPlate
+                    ? ` + ${activeTrip.plannedSnapshot.complementVehicleModelPlate}`
+                    : ''}
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-800">Destino Previsto:</span>{' '}
+                  {activeTrip.plannedSnapshot.workName || activeTrip.plannedSnapshot.destinationLabel} ({activeTrip.plannedSnapshot.destinationCity}/{activeTrip.plannedSnapshot.destinationState})
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-800">Janela Prevista:</span>{' '}
+                  {formatIsoDateToBR(activeTrip.plannedSnapshot.startDate)} a {formatIsoDateToBR(activeTrip.plannedSnapshot.endDate)}
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Ao finalizar com Check-Out, o comparativo completo entre Programado × Executado ficará disponível em Relatórios de Viagens.
+              </p>
+            </div>
+          )}
 
           <form id="checkout_trip_form" onSubmit={handleCheckOutSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

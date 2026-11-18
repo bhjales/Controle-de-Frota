@@ -25,26 +25,33 @@ import {
   Car,
   Building2,
   AlertCircle,
-  X
+  X,
+  CalendarRange,
+  GitCompareArrows,
+  AlertTriangle
 } from 'lucide-react';
-import { Trip, User } from '../types';
+import { Trip, User, LogisticsSchedule } from '../types';
 import { FleetStore } from '../store/fleetStore';
 import { exportTripReportPDF, exportTripsConsolidatedCSV, getFilteredTripData } from '../utils/tripReports';
+import { compareTripWithPlanned, formatIsoDateToBR } from '../utils/tripComparison';
 import { LeafletRouteMap } from './LeafletRouteMap';
 
 interface TripHistoryProps {
   trips: Trip[];
   currentUser: User | null;
   store: FleetStore;
+  logisticsSchedules?: LogisticsSchedule[];
 }
 
-export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
+export function TripHistory({ trips, currentUser, store, logisticsSchedules }: TripHistoryProps) {
+  const schedulesList = logisticsSchedules || store.logisticsSchedules || [];
   const [search, setSearch] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState('all');
   const [selectedWork, setSelectedWork] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'active'>('all');
+  const [logisticsFilter, setLogisticsFilter] = useState<'all' | 'logistics' | 'divergent'>('all');
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(true);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -75,7 +82,7 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
   });
 
   // Filter based on Vehicle, Work, Period, Status, Search
-  const filteredTrips = getFilteredTripData({
+  const baseFilteredTrips = getFilteredTripData({
     trips: accessibleTrips,
     works: store.works,
     vehicles: store.vehicles,
@@ -86,6 +93,40 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
     endDate,
     statusFilter,
     searchQuery: search
+  });
+
+  // Apply Logistics comparative filter when selected
+  const filteredTrips = baseFilteredTrips.filter(t => {
+    if (logisticsFilter === 'all') return true;
+    const comp = compareTripWithPlanned(t, schedulesList);
+    if (logisticsFilter === 'logistics') return Boolean(comp);
+    if (logisticsFilter === 'divergent') return Boolean(comp && !comp.isFullyCompliant);
+    return true;
+  });
+
+  // --- COMPARATIVE LOGISTICS SUMMARY ---
+  const comparedTrips = baseFilteredTrips
+    .map(t => ({ trip: t, comparison: compareTripWithPlanned(t, schedulesList) }))
+    .filter((entry): entry is { trip: Trip; comparison: NonNullable<ReturnType<typeof compareTripWithPlanned>> } => Boolean(entry.comparison));
+
+  const compliantCount = comparedTrips.filter(
+    e => e.trip.status === 'completed' && e.comparison.isFullyCompliant
+  ).length;
+  const divergentCount = comparedTrips.filter(
+    e => !e.comparison.isFullyCompliant
+  ).length;
+
+  const linkedScheduleIds = new Set(
+    trips.map(t => t.logisticsScheduleId).filter((id): id is string => Boolean(id))
+  );
+  const pendingScheduledTrips = schedulesList.filter(s => {
+    if (!s.driverId) return false;
+    if (s.scheduleStatus === 'cancelado' || s.scheduleStatus === 'concluido') return false;
+    if (linkedScheduleIds.has(s.id)) return false;
+    if (isDriver && s.driverId !== currentUser?.id) return false;
+    if (selectedVehicle !== 'all' && s.vehicleId !== selectedVehicle && s.complementVehicleId !== selectedVehicle) return false;
+    if (selectedWork !== 'all' && s.workId !== selectedWork) return false;
+    return true;
   });
 
   // --- STATS ACCUMULATORS ---
@@ -101,9 +142,10 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
     try {
       setIsExporting(true);
       exportTripReportPDF({
-        trips: accessibleTrips,
+        trips: filteredTrips,
         works: store.works,
         vehicles: store.vehicles,
+        logisticsSchedules: schedulesList,
         currentUser,
         selectedVehicleId: selectedVehicle,
         selectedWorkId: selectedWork,
@@ -124,9 +166,10 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
   const handleExportCSV = () => {
     try {
       exportTripsConsolidatedCSV({
-        trips: accessibleTrips,
+        trips: filteredTrips,
         works: store.works,
         vehicles: store.vehicles,
+        logisticsSchedules: schedulesList,
         currentUser,
         selectedVehicleId: selectedVehicle,
         selectedWorkId: selectedWork,
@@ -165,10 +208,11 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
     setStartDate('');
     setEndDate('');
     setStatusFilter('all');
+    setLogisticsFilter('all');
     setSearch('');
   };
 
-  const hasActiveFilters = selectedVehicle !== 'all' || selectedWork !== 'all' || !!startDate || !!endDate || statusFilter !== 'all' || !!search;
+  const hasActiveFilters = selectedVehicle !== 'all' || selectedWork !== 'all' || !!startDate || !!endDate || statusFilter !== 'all' || logisticsFilter !== 'all' || !!search;
 
   return (
     <div id="trip_history_view" className="space-y-6">
@@ -488,6 +532,49 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
           </div>
         </div>
 
+        {/* Filtro Rápido de Comparativo Logística */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-xs">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 font-mono">
+            <GitCompareArrows className="w-4 h-4 text-blue-600" />
+            <span>Comparativo Logística (Programado × Executado):</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setLogisticsFilter('all')}
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                logisticsFilter === 'all'
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              Todas ({baseFilteredTrips.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setLogisticsFilter('logistics')}
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                logisticsFilter === 'logistics'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+              }`}
+            >
+              Vinculadas à Logística ({comparedTrips.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setLogisticsFilter('divergent')}
+              className={`px-3 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-colors ${
+                logisticsFilter === 'divergent'
+                  ? 'bg-amber-600 text-white'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
+              }`}
+            >
+              Com Divergências ({divergentCount})
+            </button>
+          </div>
+        </div>
+
         {/* Badges de filtros ativos */}
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-1.5 pt-2">
@@ -526,6 +613,71 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
         )}
       </div>
 
+      {/* Painel Resumo Comparativo: Programado pela Logística × Executado */}
+      {(comparedTrips.length > 0 || pendingScheduledTrips.length > 0) && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
+                <GitCompareArrows className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 font-display">
+                  Comparativo: Programado pela Logística × Executado
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Auditoria entre as viagens programadas para motoristas e os trajetos realizados no Check-In / Check-Out.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
+              <span className="text-[10px] font-mono font-bold uppercase text-slate-500 block">Iniciadas / Executadas</span>
+              <span className="text-xl font-extrabold text-slate-900 font-mono tabular-nums">{comparedTrips.length}</span>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5">
+              <span className="text-[10px] font-mono font-bold uppercase text-emerald-700 block">100% Conforme</span>
+              <span className="text-xl font-extrabold text-emerald-800 font-mono tabular-nums">{compliantCount}</span>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5">
+              <span className="text-[10px] font-mono font-bold uppercase text-amber-800 block">Com Divergências</span>
+              <span className="text-xl font-extrabold text-amber-900 font-mono tabular-nums">{divergentCount}</span>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3.5">
+              <span className="text-[10px] font-mono font-bold uppercase text-blue-700 block">Aguardando Check-In</span>
+              <span className="text-xl font-extrabold text-blue-900 font-mono tabular-nums">{pendingScheduledTrips.length}</span>
+            </div>
+          </div>
+
+          {pendingScheduledTrips.length > 0 && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+              <span className="text-[11px] font-bold text-slate-700 block">
+                Programações aguardando início pelo motorista ({pendingScheduledTrips.length}):
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {pendingScheduledTrips.slice(0, 6).map(s => (
+                  <div key={s.id} className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-slate-900 truncate">
+                        {s.driverName || 'Motorista'} · {s.vehicleModelPlate}
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {s.workName || s.destinationLabel} ({s.destinationCity}/{s.destinationState}) · {formatIsoDateToBR(s.startDate)} a {formatIsoDateToBR(s.endDate)}
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                      Pendente
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main Panel */}
       <div className="space-y-4">
 
@@ -540,6 +692,7 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
           <div className="space-y-4">
             {filteredTrips.map((trip) => {
               const isCompleted = trip.status === 'completed';
+              const comparison = compareTripWithPlanned(trip, schedulesList);
 
               return (
                 <div
@@ -567,11 +720,32 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                             Finalizado
                           </span>
                         )}
+                        {comparison && (
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-bold border uppercase tracking-wide ${
+                              comparison.isFullyCompliant
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}
+                          >
+                            <CalendarRange className="w-3 h-3" />
+                            {isCompleted
+                              ? comparison.isFullyCompliant
+                                ? 'Programada · Conforme'
+                                : `Programada · ${comparison.divergences.length} Divergência(s)`
+                              : 'Programada · Em Execução'}
+                          </span>
+                        )}
                       </div>
                       
                       <h4 className="text-base font-bold text-slate-900 leading-tight">
                         <span className="text-slate-400 font-medium">Veículo:</span> {trip.vehicleModelPlate}
                       </h4>
+                      {trip.complementVehicleModelPlate && (
+                        <p className="text-xs font-bold text-indigo-700">
+                          + Complemento (Carroceria): {trip.complementVehicleModelPlate}
+                        </p>
+                      )}
                       {!isDriver && (
                         <p className="text-xs text-slate-500 flex items-center gap-1.5 font-medium">
                           👤 <strong className="text-slate-700">{trip.driverName}</strong> <span className="text-slate-300">•</span> {trip.driverEmail}
@@ -773,6 +947,94 @@ export function TripHistory({ trips, currentUser, store }: TripHistoryProps) {
                       )}
                     </div>
                   </div>
+
+                  {/* Comparativo Programado (Logística) vs Executado */}
+                  {comparison && (
+                    <div className="mt-5 mx-2 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <GitCompareArrows className="w-4 h-4 text-indigo-600 shrink-0" />
+                          <h5 className="text-xs font-bold text-slate-900">
+                            Comparativo: Programado pela Logística × Executado
+                          </h5>
+                        </div>
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] font-bold border self-start ${
+                            !isCompleted
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : comparison.isFullyCompliant
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-amber-50 text-amber-800 border-amber-200'
+                          }`}
+                        >
+                          {!isCompleted
+                            ? 'Em andamento (prévia)'
+                            : comparison.isFullyCompliant
+                            ? 'Executado 100% conforme programado'
+                            : `Divergências detectadas (${comparison.divergences.length})`}
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="text-[10px] uppercase font-mono text-slate-500 border-b border-slate-200">
+                              <th className="py-1.5 pr-3">Item</th>
+                              <th className="py-1.5 pr-3">Programado (Logística)</th>
+                              <th className="py-1.5 pr-3">Executado (Motorista)</th>
+                              <th className="py-1.5 text-right">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200/70">
+                            {comparison.items.map(row => (
+                              <tr key={row.key}>
+                                <td className="py-2 pr-3 font-semibold text-slate-700 whitespace-nowrap">
+                                  {row.label}
+                                </td>
+                                <td className="py-2 pr-3 text-slate-600">
+                                  {row.plannedValue}
+                                </td>
+                                <td className="py-2 pr-3 font-semibold text-slate-900">
+                                  {row.executedValue}
+                                </td>
+                                <td className="py-2 text-right whitespace-nowrap">
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                      row.matches
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                                    }`}
+                                  >
+                                    {row.matches ? (
+                                      <CheckCircle2 className="w-3 h-3" />
+                                    ) : (
+                                      <AlertTriangle className="w-3 h-3" />
+                                    )}
+                                    {row.statusText}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {(comparison.planned.cargoDescription || comparison.planned.notes) && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-600 pt-1 border-t border-slate-200/70">
+                          {comparison.planned.cargoDescription && (
+                            <span>
+                              <strong className="text-slate-800">Carga Programada:</strong> {comparison.planned.cargoDescription}
+                            </span>
+                          )}
+                          {comparison.planned.notes && (
+                            <span>
+                              <strong className="text-slate-800">Obs. Logística:</strong> {comparison.planned.notes}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Admin Options */}
                   {currentUser?.role === 'admin' && (

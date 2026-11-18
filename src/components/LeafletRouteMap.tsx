@@ -146,32 +146,87 @@ export function LeafletRouteMap({
 }: LeafletRouteMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const mapInstanceRef = React.useRef<L.Map | null>(null);
+  const layerGroupRef = React.useRef<L.LayerGroup | null>(null);
 
+  // 1. Initialize Leaflet map & ResizeObserver once on mount, clean up on unmount
   React.useEffect(() => {
-    if (!mapRef.current) return;
+    const container = mapRef.current;
+    if (!container) return;
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapRef.current, {
-        center: [-10.184, -48.3336],
-        zoom: 6,
-        zoomControl: true,
-      });
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 19,
-      }).addTo(map);
-
-      mapInstanceRef.current = map;
+    // Defensive cleanup if container was reused
+    if ((container as unknown as { _leaflet_id?: number })._leaflet_id) {
+      delete (container as unknown as { _leaflet_id?: number })._leaflet_id;
     }
 
-    const map = mapInstanceRef.current;
-
-    map.eachLayer((layer) => {
-      if (!(layer instanceof L.TileLayer)) {
-        map.removeLayer(layer);
-      }
+    const map = L.map(container, {
+      center: [-10.184, -48.3336],
+      zoom: 6,
+      zoomControl: true,
     });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    const layerGroup = L.layerGroup().addTo(map);
+
+    mapInstanceRef.current = map;
+    layerGroupRef.current = layerGroup;
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        if (mapInstanceRef.current === map && map.getContainer()) {
+          try {
+            map.invalidateSize();
+          } catch {
+            // Ignore resize calls during unmount
+          }
+        }
+      });
+      observer.observe(container);
+    }
+
+    return () => {
+      if (observer) {
+        observer.disconnect();
+      }
+      layerGroupRef.current = null;
+      if (mapInstanceRef.current === map) {
+        mapInstanceRef.current = null;
+      }
+      try {
+        map.remove();
+      } catch {
+        // Ignore removal errors if DOM already detached
+      }
+    };
+  }, []);
+
+  // 2. Render markers and routes safely into layerGroup
+  React.useEffect(() => {
+    const map = mapInstanceRef.current;
+    const layerGroup = layerGroupRef.current;
+    if (!map || !layerGroup) return;
+
+    let isMounted = true;
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const isMapAlive = () =>
+      isMounted &&
+      mapInstanceRef.current === map &&
+      layerGroupRef.current === layerGroup &&
+      Boolean(map.getContainer()) &&
+      Boolean(map.getPane('markerPane'));
+
+    const isValidCoord = (coord: [number, number]) =>
+      Array.isArray(coord) &&
+      coord.length === 2 &&
+      Number.isFinite(coord[0]) &&
+      Number.isFinite(coord[1]);
+
+    layerGroup.clearLayers();
 
     const hqCoord: [number, number] = [-10.184, -48.3336];
     const hqIcon = createPinIcon('#0f172a', '#38bdf8', 'HQ');
@@ -179,40 +234,44 @@ export function LeafletRouteMap({
     const tripIcon = createPinIcon('#059669', '#a7f3d0', 'VG');
     const logisticsIcon = createPinIcon('#7c3aed', '#ddd6fe', 'LG');
 
-    L.marker(hqCoord, { icon: hqIcon })
-      .addTo(map)
-      .bindPopup('<b>Escritório Central / Matriz - Palmas/TO</b>');
-
-    let isMounted = true;
-
     async function loadMarkers() {
+      if (!isMapAlive()) return;
+
+      L.marker(hqCoord, { icon: hqIcon })
+        .addTo(layerGroup)
+        .bindPopup('<b>Escritório Central / Matriz - Palmas/TO</b>');
+
       const latLngs: [number, number][] = [hqCoord];
 
       // 1. Plot Construction Works & connection to HQ
       for (const work of works) {
-        if (!isMounted) break;
+        if (!isMapAlive()) return;
         const coord = await resolveCityCoordinates(work.city, work.state);
+        if (!isMapAlive()) return;
+        if (!isValidCoord(coord)) continue;
+
         latLngs.push(coord);
 
-        const marker = L.marker(coord, { icon: workIcon }).addTo(map);
-        marker.bindPopup(
-          `<b>Obra: ${work.name}</b><br/>📍 ${work.city} - ${work.state}<br/>Status: ${
-            work.status === 'active' ? 'Ativa' : 'Concluída'
-          }`
-        );
+        L.marker(coord, { icon: workIcon })
+          .addTo(layerGroup)
+          .bindPopup(
+            `<b>Obra: ${work.name}</b><br/>📍 ${work.city} - ${work.state}<br/>Status: ${
+              work.status === 'active' ? 'Ativa' : 'Concluída'
+            }`
+          );
 
         L.polyline([hqCoord, coord], {
           color: '#2563eb',
           weight: 3,
           opacity: 0.7,
           dashArray: '5, 10',
-        }).addTo(map);
+        }).addTo(layerGroup);
       }
 
       // 2. Plot Trip routes between Origin and Destination municipalities
       const plottedRoutes = new Set<string>();
       for (const trip of trips) {
-        if (!isMounted) break;
+        if (!isMapAlive()) return;
         const destCity = trip.destinationCity || trip.checkIn.destinationCity;
         const destState = trip.destinationState || trip.checkIn.destinationState || '';
         if (!destCity) continue;
@@ -224,11 +283,15 @@ export function LeafletRouteMap({
         plottedRoutes.add(routeKey);
 
         const origCoord = await resolveCityCoordinates(origCity, origState);
+        if (!isMapAlive()) return;
         const destCoord = await resolveCityCoordinates(destCity, destState);
+        if (!isMapAlive()) return;
+        if (!isValidCoord(origCoord) || !isValidCoord(destCoord)) continue;
+
         latLngs.push(origCoord, destCoord);
 
         L.marker(destCoord, { icon: tripIcon })
-          .addTo(map)
+          .addTo(layerGroup)
           .bindPopup(
             `<b>Destino Viagem: ${trip.checkIn.destination}</b><br/>📍 ${destCity}${
               destState ? ` - ${destState}` : ''
@@ -239,13 +302,13 @@ export function LeafletRouteMap({
           color: '#10b981',
           weight: 3,
           opacity: 0.85,
-        }).addTo(map);
+        }).addTo(layerGroup);
       }
 
       // 3. Plot active/scheduled Logistics Schedules routes
       const plottedLogistics = new Set<string>();
       for (const sched of logisticsSchedules) {
-        if (!isMounted) break;
+        if (!isMapAlive()) return;
         if (sched.scheduleStatus === 'cancelado') continue;
         if (!sched.destinationCity) continue;
 
@@ -256,13 +319,21 @@ export function LeafletRouteMap({
         plottedLogistics.add(lKey);
 
         const origCoord = await resolveCityCoordinates(origCity, origState);
+        if (!isMapAlive()) return;
         const destCoord = await resolveCityCoordinates(sched.destinationCity, sched.destinationState);
+        if (!isMapAlive()) return;
+        if (!isValidCoord(origCoord) || !isValidCoord(destCoord)) continue;
+
         latLngs.push(origCoord, destCoord);
 
         L.marker(destCoord, { icon: logisticsIcon })
-          .addTo(map)
+          .addTo(layerGroup)
           .bindPopup(
-            `<b>Logística: ${sched.vehicleModelPlate}</b><br/>📍 ${sched.destinationLabel} (${sched.destinationCity}/${sched.destinationState})`
+            `<b>Logística: ${sched.vehicleModelPlate}${
+              sched.complementVehicleModelPlate
+                ? ` + Comp.: ${sched.complementVehicleModelPlate}`
+                : ''
+            }</b><br/>📍 ${sched.destinationLabel} (${sched.destinationCity}/${sched.destinationState})`
           );
 
         L.polyline([origCoord, destCoord], {
@@ -270,48 +341,42 @@ export function LeafletRouteMap({
           weight: 3,
           opacity: 0.8,
           dashArray: '8, 6',
-        }).addTo(map);
+        }).addTo(layerGroup);
       }
 
-      if (isMounted && latLngs.length > 1) {
-        const bounds = L.latLngBounds(latLngs);
-        map.fitBounds(bounds, { padding: [50, 50] });
+      if (isMapAlive() && latLngs.length > 1) {
+        try {
+          const bounds = L.latLngBounds(latLngs);
+          map.fitBounds(bounds, { padding: [50, 50] });
+        } catch {
+          // Ignore fitBounds error if map container collapsed
+        }
       }
 
-      setTimeout(() => {
-        if (isMounted && mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
+      resizeTimeout = setTimeout(() => {
+        if (isMapAlive()) {
+          try {
+            map.invalidateSize();
+          } catch {
+            // Ignore resize error
+          }
         }
       }, 250);
     }
 
-    loadMarkers();
+    map.whenReady(() => {
+      if (isMapAlive()) {
+        void loadMarkers();
+      }
+    });
 
     return () => {
       isMounted = false;
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
     };
   }, [works, trips, logisticsSchedules]);
-
-  React.useEffect(() => {
-    const el = mapRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(() => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  React.useEffect(() => {
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-    };
-  }, []);
 
   return (
     <div

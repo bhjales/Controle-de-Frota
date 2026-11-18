@@ -987,7 +987,7 @@ export function ManagerDashboard({
       tripRows.push([
         t.id.toUpperCase().substring(0, 8),
         t.driverName,
-        t.vehicleModelPlate,
+        t.complementVehicleModelPlate ? `${t.vehicleModelPlate} + ${t.complementVehicleModelPlate}` : t.vehicleModelPlate,
         t.workName || 'N/A',
         `${t.checkIn.origin || 'Escritório Central'} (${origCity}/${origState})`,
         destCity ? `${t.checkIn.destination} (${destCity}${destState ? `/${destState}` : ''})` : t.checkIn.destination,

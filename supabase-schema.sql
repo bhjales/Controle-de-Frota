@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
     "isActive" BOOLEAN DEFAULT true,
     "tankCapacityLiters" NUMERIC,
     "hasLogisticsControl" BOOLEAN DEFAULT false,
+    "isComplement" BOOLEAN DEFAULT false,
     CONSTRAINT vehicles_status_check CHECK (status = ANY (ARRAY['available'::text, 'in_use'::text, 'maintenance'::text]))
 );
 
@@ -136,6 +137,8 @@ CREATE TABLE IF NOT EXISTS public.trips (
     "driverEmail" TEXT,
     "vehicleId" TEXT REFERENCES public.vehicles(id) ON DELETE SET NULL,
     "vehicleModelPlate" TEXT,
+    "complementVehicleId" TEXT REFERENCES public.vehicles(id) ON DELETE SET NULL,
+    "complementVehicleModelPlate" TEXT,
     status TEXT DEFAULT 'active', -- 'active' ou 'completed'
     "workId" TEXT REFERENCES public.construction_works(id) ON DELETE SET NULL,
     "workName" TEXT,
@@ -146,6 +149,8 @@ CREATE TABLE IF NOT EXISTS public.trips (
     "checkIn" JSONB,
     "checkOut" JSONB,
     "kmDriven" NUMERIC DEFAULT 0,
+    "logisticsScheduleId" TEXT,
+    "plannedSnapshot" JSONB,
     "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -252,6 +257,8 @@ CREATE TABLE IF NOT EXISTS public.logistics_schedules (
     id TEXT PRIMARY KEY,
     "vehicleId" TEXT REFERENCES public.vehicles(id) ON DELETE CASCADE,
     "vehicleModelPlate" TEXT,
+    "complementVehicleId" TEXT REFERENCES public.vehicles(id) ON DELETE SET NULL,
+    "complementVehicleModelPlate" TEXT,
     "allocationType" TEXT NOT NULL DEFAULT 'uso_programado', -- 'uso_programado'
     "scheduleStatus" TEXT NOT NULL DEFAULT 'programado', -- 'programado', 'em_andamento', 'concluido', 'cancelado'
     "isThirdPartyRental" BOOLEAN DEFAULT false,
@@ -344,12 +351,19 @@ ALTER TABLE public.construction_works ADD COLUMN IF NOT EXISTS city TEXT;
 ALTER TABLE public.construction_works ADD COLUMN IF NOT EXISTS state TEXT;
 ALTER TABLE public.construction_works ADD COLUMN IF NOT EXISTS description TEXT;
 
--- Atualização na tabela vehicles (Controle de Logística, Tanque e Status Ativo)
+-- Atualização na tabela vehicles (Controle de Logística, Tanque, Status Ativo e Complemento/Carroceria)
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN DEFAULT true;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "tankCapacityLiters" NUMERIC;
 ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "hasLogisticsControl" BOOLEAN DEFAULT false;
+ALTER TABLE public.vehicles ADD COLUMN IF NOT EXISTS "isComplement" BOOLEAN DEFAULT false;
 
--- Atualização na tabela logistics_schedules (Obra de Origem, Origem Livre, Descrição Livre e Descrição da Carga)
+-- Atualização na tabela trips (Acoplamento de Veículo Complemento / Carroceria e Vínculo com Logística)
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "complementVehicleId" TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "complementVehicleModelPlate" TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "logisticsScheduleId" TEXT;
+ALTER TABLE public.trips ADD COLUMN IF NOT EXISTS "plannedSnapshot" JSONB;
+
+-- Atualização na tabela logistics_schedules (Obra de Origem, Origem Livre, Descrição Livre, Carga e Complemento/Carroceria)
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkId" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originWorkName" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originLabel" TEXT;
@@ -357,6 +371,8 @@ ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originCity" TEX
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "originState" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "programDescription" TEXT;
 ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "cargoDescription" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "complementVehicleId" TEXT;
+ALTER TABLE public.logistics_schedules ADD COLUMN IF NOT EXISTS "complementVehicleModelPlate" TEXT;
 
 -- Recarrega o cache de schema do PostgREST/Supabase imediatamente
 NOTIFY pgrst, 'reload schema';

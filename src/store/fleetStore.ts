@@ -1,4 +1,4 @@
-import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog, Supplier, SupplierCategory, FuelInflow, FuelDispense, FuelDispenseType, FiscalDocType, WorkFuelBalance, LogisticsSchedule, LogisticsAllocationType, LogisticsScheduleStatus } from '../types';
+import { User, UserRole, Vehicle, Trip, CheckInDetails, CheckOutDetails, Equipment, EquipmentCheckInDetails, EquipmentCheckOutDetails, EquipmentUsage, ConstructionWork, EquipmentType, VehicleCategory, MaintenanceLog, Supplier, SupplierCategory, FuelInflow, FuelDispense, FuelDispenseType, FiscalDocType, WorkFuelBalance, LogisticsSchedule, LogisticsAllocationType, LogisticsScheduleStatus, PlannedLogisticsSnapshot } from '../types';
 import { supabase } from '../lib/supabase';
 
 // Limpa qualquer resquício antigo em armazenamento do navegador (nenhum dado é salvo localmente)
@@ -243,6 +243,7 @@ export class FleetStore {
             ...v,
             isActive,
             hasLogisticsControl: Boolean(v.hasLogisticsControl),
+            isComplement: Boolean(v.isComplement),
             status: mappedStatus,
           };
         });
@@ -253,7 +254,9 @@ export class FleetStore {
       let needsSync = false;
       
       this.vehicles.forEach(v => {
-        const isInActiveTrip = this.trips.some(t => t.status === 'active' && t.vehicleId === v.id);
+        const isInActiveTrip = this.trips.some(
+          t => t.status === 'active' && (t.vehicleId === v.id || t.complementVehicleId === v.id)
+        );
         if (isInActiveTrip && v.status !== 'in_use') {
           v.status = 'in_use';
           needsSync = true;
@@ -333,6 +336,14 @@ export class FleetStore {
             if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
               copy.vehicleId = null;
             }
+            if (!copy.complementVehicleId || !vehicleIds.has(copy.complementVehicleId)) {
+              copy.complementVehicleId = null;
+              copy.complementVehicleModelPlate = null;
+            } else {
+              copy.complementVehicleModelPlate = copy.complementVehicleModelPlate || null;
+            }
+            copy.logisticsScheduleId = copy.logisticsScheduleId || null;
+            copy.plannedSnapshot = copy.plannedSnapshot || null;
             if (copy.checkIn && copy.checkIn.photo) {
               copy.checkIn.photo = '';
             }
@@ -365,6 +376,12 @@ export class FleetStore {
             if (copy.vehicleId && !vehicleIds.has(copy.vehicleId)) {
               copy.vehicleId = null;
             }
+            if (!copy.complementVehicleId || !vehicleIds.has(copy.complementVehicleId)) {
+              copy.complementVehicleId = null;
+              copy.complementVehicleModelPlate = null;
+            } else {
+              copy.complementVehicleModelPlate = copy.complementVehicleModelPlate || null;
+            }
             if (copy.originWorkId && !workIds.has(copy.originWorkId)) {
               copy.originWorkId = null;
             }
@@ -379,11 +396,35 @@ export class FleetStore {
         });
       };
 
-      let sanitized = getSanitizedItems([]);
+      const excludedForTable: string[] = [];
+      let sanitized = getSanitizedItems(excludedForTable);
       let { error } =
         table === 'vehicles'
           ? await this.upsertVehicleWithColumnFallback(sanitized, false)
           : await supabase.from(table).upsert(sanitized);
+
+      if (error && (table === 'trips' || table === 'logistics_schedules')) {
+        const optionalTripOrLogisticsCols = [
+          'complementVehicleId',
+          'complementVehicleModelPlate',
+          'logisticsScheduleId',
+          'plannedSnapshot',
+        ];
+        let attempts = 0;
+        while (error && attempts < 6) {
+          attempts++;
+          const msg = error.message || '';
+          const match = msg.match(/Could not find the '([^']+)' column/i);
+          const missingCol = match?.[1];
+          if (!missingCol || !optionalTripOrLogisticsCols.includes(missingCol) || excludedForTable.includes(missingCol)) {
+            break;
+          }
+          excludedForTable.push(missingCol);
+          sanitized = getSanitizedItems(excludedForTable);
+          const retry = await supabase.from(table).upsert(sanitized);
+          error = retry.error;
+        }
+      }
 
       if (error) {
         this.lastSyncError = `[${table}] ${error.message}`;
@@ -810,6 +851,7 @@ export class FleetStore {
           ? Number(vehicle.tankCapacityLiters)
           : null,
       hasLogisticsControl: Boolean(vehicle.hasLogisticsControl),
+      isComplement: Boolean(vehicle.isComplement),
     };
   }
 
@@ -836,7 +878,7 @@ export class FleetStore {
         break;
       }
 
-      const safeOptionalCols = ['isActive', 'tankCapacityLiters', 'hasLogisticsControl'];
+      const safeOptionalCols = ['isActive', 'tankCapacityLiters', 'hasLogisticsControl', 'isComplement'];
       if (!safeOptionalCols.includes(missingCol)) {
         break;
       }
@@ -870,6 +912,7 @@ export class FleetStore {
       ...vehicleData,
       isActive: vehicleData.isActive !== undefined ? Boolean(vehicleData.isActive) : true,
       hasLogisticsControl: Boolean(vehicleData.hasLogisticsControl),
+      isComplement: Boolean(vehicleData.isComplement),
       id: plateUpper,
       plate: plateUpper,
       status: 'available',
@@ -916,7 +959,8 @@ export class FleetStore {
     const normalized: Vehicle = {
       ...updatedVehicle,
       isActive: updatedVehicle.isActive !== undefined ? Boolean(updatedVehicle.isActive) : updatedVehicle.status !== 'inactive',
-      hasLogisticsControl: Boolean(updatedVehicle.hasLogisticsControl)
+      hasLogisticsControl: Boolean(updatedVehicle.hasLogisticsControl),
+      isComplement: Boolean(updatedVehicle.isComplement)
     };
     this.vehicles = this.vehicles.map(v => v.id === normalized.id ? normalized : v);
     this.persistLocalState();
@@ -1230,7 +1274,13 @@ export class FleetStore {
     return { success: true, message: 'Cadastro do usuário atualizado com sucesso!' };
   }
 
-  public checkInTrip(vehicleId: string, details: Omit<CheckInDetails, 'time'>, workId?: string): { success: boolean, message: string } {
+  public checkInTrip(
+    vehicleId: string,
+    details: Omit<CheckInDetails, 'time'>,
+    workId?: string,
+    complementVehicleId?: string,
+    logisticsScheduleId?: string
+  ): { success: boolean, message: string } {
     if (!this.currentUser) {
       return { success: false, message: 'É necessário estar autenticado para abrir viagem.' };
     }
@@ -1246,15 +1296,103 @@ export class FleetStore {
       return { success: false, message: 'Veículo selecionado não existe.' };
     }
 
+    if (vehicle.isComplement) {
+      return {
+        success: false,
+        message: 'Veículos cadastrados como complemento (carroceria) não podem realizar viagem isoladamente. Selecione um veículo principal (não complemento) e acople o complemento.'
+      };
+    }
+
+    if (vehicle.isActive === false || vehicle.status === 'inactive') {
+      return { success: false, message: 'Este veículo está inativo na frota.' };
+    }
+
     if (vehicle.status !== 'available') {
       return { success: false, message: `Este veículo está atualmente ${vehicle.status === 'in_use' ? 'em uso' : 'em manutenção'}.` };
     }
 
-    // Update vehicle state
+    const primaryAlreadyInTrip = this.trips.some(
+      t => t.status === 'active' && (t.vehicleId === vehicle.id || t.complementVehicleId === vehicle.id)
+    );
+    if (primaryAlreadyInTrip) {
+      return { success: false, message: `O veículo ${vehicle.plate} já está vinculado a outra viagem ativa.` };
+    }
+
+    let complementVehicle: Vehicle | undefined;
+    if (complementVehicleId && complementVehicleId.trim()) {
+      complementVehicle = this.vehicles.find(v => v.id === complementVehicleId);
+      if (!complementVehicle) {
+        return { success: false, message: 'Complemento (carroceria) selecionado não existe.' };
+      }
+      if (!complementVehicle.isComplement) {
+        return { success: false, message: 'O ativo selecionado para acoplamento não é um veículo complemento (carroceria).' };
+      }
+      if (complementVehicle.id === vehicle.id) {
+        return { success: false, message: 'O veículo principal e o complemento não podem ser o mesmo veículo.' };
+      }
+      if (complementVehicle.isActive === false || complementVehicle.status === 'inactive') {
+        return { success: false, message: `O complemento ${complementVehicle.plate} está inativo na frota.` };
+      }
+      if (complementVehicle.status !== 'available') {
+        return {
+          success: false,
+          message: `O complemento ${complementVehicle.plate} está atualmente ${complementVehicle.status === 'in_use' ? 'em outra viagem' : 'em manutenção'}.`
+        };
+      }
+      const complementBusy = this.trips.some(
+        t => t.status === 'active' && (t.vehicleId === complementVehicle!.id || t.complementVehicleId === complementVehicle!.id)
+      );
+      if (complementBusy) {
+        return {
+          success: false,
+          message: `O complemento ${complementVehicle.plate} já está acoplado em outra viagem ativa no momento.`
+        };
+      }
+    }
+
+    // Match optional Logistics Schedule
+    const matchedSchedule = logisticsScheduleId
+      ? this.logisticsSchedules.find(s => s.id === logisticsScheduleId)
+      : undefined;
+
+    const plannedSnapshot: PlannedLogisticsSnapshot | undefined = matchedSchedule
+      ? {
+          scheduleId: matchedSchedule.id,
+          vehicleId: matchedSchedule.vehicleId,
+          vehicleModelPlate: matchedSchedule.vehicleModelPlate,
+          complementVehicleId: matchedSchedule.complementVehicleId,
+          complementVehicleModelPlate: matchedSchedule.complementVehicleModelPlate,
+          originLabel: matchedSchedule.originWorkName || matchedSchedule.originLabel || 'Matriz / Base',
+          originCity: matchedSchedule.originCity || '',
+          originState: matchedSchedule.originState || '',
+          destinationLabel:
+            matchedSchedule.workName ||
+            matchedSchedule.destinationLabel ||
+            matchedSchedule.programDescription ||
+            'Destino',
+          destinationCity: matchedSchedule.destinationCity || '',
+          destinationState: matchedSchedule.destinationState || '',
+          workId: matchedSchedule.workId,
+          workName: matchedSchedule.workName,
+          cargoDescription: matchedSchedule.cargoDescription,
+          startDate: matchedSchedule.startDate,
+          endDate: matchedSchedule.endDate,
+          driverId: matchedSchedule.driverId,
+          driverName: matchedSchedule.driverName,
+          isThirdPartyRental: matchedSchedule.isThirdPartyRental,
+          thirdPartyName: matchedSchedule.thirdPartyName,
+          notes: matchedSchedule.notes,
+        }
+      : undefined;
+
+    // Update vehicle states
     vehicle.status = 'in_use';
     vehicle.currentKm = details.km;
+    if (complementVehicle) {
+      complementVehicle.status = 'in_use';
+    }
 
-    const finalWorkId = vehicle.workId || workId;
+    const finalWorkId = matchedSchedule ? (workId || matchedSchedule.workId || vehicle.workId) : (vehicle.workId || workId);
     const matchedWork = finalWorkId ? this.works.find(w => w.id === finalWorkId) : undefined;
 
     const newTrip: Trip = {
@@ -1264,6 +1402,12 @@ export class FleetStore {
       driverEmail: this.currentUser.email,
       vehicleId: vehicle.id,
       vehicleModelPlate: `${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
+      complementVehicleId: complementVehicle?.id,
+      complementVehicleModelPlate: complementVehicle
+        ? `${complementVehicle.brand} ${complementVehicle.model} (${complementVehicle.plate})`
+        : undefined,
+      logisticsScheduleId: matchedSchedule?.id,
+      plannedSnapshot,
       status: 'active',
       workId: matchedWork?.id,
       workName: matchedWork?.name,
@@ -1282,12 +1426,29 @@ export class FleetStore {
     };
 
     this.trips.unshift(newTrip); // Newest first
-    
+
+    if (matchedSchedule && matchedSchedule.scheduleStatus === 'programado') {
+      this.logisticsSchedules = this.logisticsSchedules.map(s =>
+        s.id === matchedSchedule.id ? { ...s, scheduleStatus: 'em_andamento' } : s
+      );
+    }
+
     // update vehicles list
-    this.vehicles = this.vehicles.map(v => v.id === vehicleId ? vehicle : v);
-    
+    this.vehicles = this.vehicles.map(v => {
+      if (v.id === vehicleId) return vehicle;
+      if (complementVehicle && v.id === complementVehicle.id) return complementVehicle;
+      return v;
+    });
+
     this.saveState();
-    return { success: true, message: 'Check-in realizado! Viagem iniciada com sucesso.' };
+    return {
+      success: true,
+      message: complementVehicle
+        ? `Check-in realizado com complemento ${complementVehicle.plate} acoplado! Viagem iniciada.`
+        : matchedSchedule
+        ? 'Check-in da viagem programada realizado! Viagem iniciada com sucesso.'
+        : 'Check-in realizado! Viagem iniciada com sucesso.'
+    };
   }
 
   public checkOutTrip(tripId: string, details: Omit<CheckOutDetails, 'time'>): { success: boolean, message: string } {
@@ -1305,12 +1466,22 @@ export class FleetStore {
       return { success: false, message: `Quilometragem final (${details.km} km) não pode ser menor que a inicial (${trip.checkIn.km} km).` };
     }
 
-    const vehicle = this.vehicles.find(v => v.id === trip.vehicleId);
-    if (vehicle) {
-      vehicle.status = 'available';
-      vehicle.currentKm = details.km;
-      this.vehicles = this.vehicles.map(v => v.id === vehicle.id ? vehicle : v);
-    }
+    this.vehicles = this.vehicles.map(v => {
+      if (v.id === trip.vehicleId) {
+        return {
+          ...v,
+          status: v.isActive === false ? 'inactive' : 'available',
+          currentKm: details.km
+        };
+      }
+      if (trip.complementVehicleId && v.id === trip.complementVehicleId) {
+        return {
+          ...v,
+          status: v.isActive === false ? 'inactive' : 'available'
+        };
+      }
+      return v;
+    });
 
     const kmDriven = details.km - trip.checkIn.km;
 
@@ -1326,9 +1497,24 @@ export class FleetStore {
     };
 
     this.trips[tripIndex] = updatedTrip;
+
+    // Update linked logistics schedule to 'concluido'
+    if (trip.logisticsScheduleId) {
+      this.logisticsSchedules = this.logisticsSchedules.map(s =>
+        s.id === trip.logisticsScheduleId && s.scheduleStatus !== 'cancelado'
+          ? { ...s, scheduleStatus: 'concluido' }
+          : s
+      );
+    }
+
     this.saveState();
 
-    return { success: true, message: `Check-out concluído! Total rodado: ${kmDriven} km.` };
+    return {
+      success: true,
+      message: trip.logisticsScheduleId
+        ? `Check-out concluído! Total rodado: ${kmDriven} km. Comparativo com a programação disponível em Relatórios de Viagens.`
+        : `Check-out concluído! Total rodado: ${kmDriven} km.`
+    };
   }
 
   public deleteTrip(tripId: string): { success: boolean, message: string } {
@@ -1336,11 +1522,23 @@ export class FleetStore {
     if (!trip) return { success: false, message: 'Viagem não encontrada.' };
 
     if (trip.status === 'active') {
-      // Free the vehicle status
-      const vehicle = this.vehicles.find(v => v.id === trip.vehicleId);
-      if (vehicle) {
-        vehicle.status = 'available';
-        this.vehicles = this.vehicles.map(v => v.id === vehicle.id ? vehicle : v);
+      // Free the vehicle and coupled complement status
+      this.vehicles = this.vehicles.map(v => {
+        if (v.id === trip.vehicleId || (trip.complementVehicleId && v.id === trip.complementVehicleId)) {
+          return {
+            ...v,
+            status: v.isActive === false ? 'inactive' : 'available'
+          };
+        }
+        return v;
+      });
+
+      if (trip.logisticsScheduleId) {
+        this.logisticsSchedules = this.logisticsSchedules.map(s =>
+          s.id === trip.logisticsScheduleId && s.scheduleStatus === 'em_andamento'
+            ? { ...s, scheduleStatus: 'programado' }
+            : s
+        );
       }
     }
 
@@ -2233,6 +2431,7 @@ export class FleetStore {
 
   public addLogisticsSchedule(data: {
     vehicleId: string;
+    complementVehicleId?: string;
     allocationType?: LogisticsAllocationType;
     scheduleStatus?: LogisticsScheduleStatus;
     isThirdPartyRental: boolean;
@@ -2255,6 +2454,25 @@ export class FleetStore {
     const vehicle = this.vehicles.find(v => v.id === data.vehicleId);
     if (!vehicle) {
       return { success: false, message: 'Veículo selecionado não encontrado.' };
+    }
+    if (vehicle.isComplement) {
+      return {
+        success: false,
+        message: 'Um complemento (carroceria) não pode ser agendado isoladamente como veículo principal. Selecione um veículo trator e acople o complemento.'
+      };
+    }
+    let complementVehicle: Vehicle | undefined;
+    if (data.complementVehicleId && data.complementVehicleId.trim()) {
+      complementVehicle = this.vehicles.find(v => v.id === data.complementVehicleId);
+      if (!complementVehicle) {
+        return { success: false, message: 'Complemento selecionado não encontrado.' };
+      }
+      if (!complementVehicle.isComplement) {
+        return { success: false, message: 'O ativo selecionado como complemento não está cadastrado como carroceria/complemento.' };
+      }
+      if (complementVehicle.id === vehicle.id) {
+        return { success: false, message: 'O veículo principal e o complemento não podem ser iguais.' };
+      }
     }
     if (!data.startDate || !data.endDate) {
       return { success: false, message: 'Informe as datas inicial e final da programação.' };
@@ -2280,6 +2498,10 @@ export class FleetStore {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       vehicleId: vehicle.id,
       vehicleModelPlate: `${vehicle.brand} ${vehicle.model} (${vehicle.plate})`,
+      complementVehicleId: complementVehicle?.id,
+      complementVehicleModelPlate: complementVehicle
+        ? `${complementVehicle.brand} ${complementVehicle.model} (${complementVehicle.plate})`
+        : undefined,
       allocationType: data.allocationType || 'uso_programado',
       scheduleStatus: data.scheduleStatus || 'programado',
       isThirdPartyRental: Boolean(data.isThirdPartyRental || data.allocationType === 'terceiros'),
@@ -2309,7 +2531,9 @@ export class FleetStore {
     this.saveState();
     return {
       success: true,
-      message: `Programação logística registrada para ${vehicle.plate}!`,
+      message: complementVehicle
+        ? `Programação logística registrada para ${vehicle.plate} + Complemento ${complementVehicle.plate}!`
+        : `Programação logística registrada para ${vehicle.plate}!`,
       schedule: newSchedule
     };
   }
@@ -2322,6 +2546,26 @@ export class FleetStore {
     }
 
     const vehicle = this.vehicles.find(v => v.id === updated.vehicleId);
+    if (vehicle?.isComplement) {
+      return {
+        success: false,
+        message: 'Um complemento (carroceria) não pode ser programado isoladamente como veículo principal.'
+      };
+    }
+    let complementVehicle: Vehicle | undefined;
+    if (updated.complementVehicleId && updated.complementVehicleId.trim()) {
+      complementVehicle = this.vehicles.find(v => v.id === updated.complementVehicleId);
+      if (!complementVehicle) {
+        return { success: false, message: 'Complemento selecionado não encontrado.' };
+      }
+      if (!complementVehicle.isComplement) {
+        return { success: false, message: 'O ativo selecionado como complemento não é uma carroceria/complemento.' };
+      }
+      if (vehicle && complementVehicle.id === vehicle.id) {
+        return { success: false, message: 'O veículo principal e o complemento não podem ser iguais.' };
+      }
+    }
+
     const matchedOriginWork = updated.originWorkId ? this.works.find(w => w.id === updated.originWorkId) : undefined;
     const matchedDestWork = updated.workId ? this.works.find(w => w.id === updated.workId) : undefined;
     const matchedDriver = updated.driverId ? this.users.find(u => u.id === updated.driverId) : undefined;
@@ -2330,6 +2574,10 @@ export class FleetStore {
       ...updated,
       allocationType: updated.allocationType || 'uso_programado',
       vehicleModelPlate: vehicle ? `${vehicle.brand} ${vehicle.model} (${vehicle.plate})` : updated.vehicleModelPlate,
+      complementVehicleId: complementVehicle?.id || undefined,
+      complementVehicleModelPlate: complementVehicle
+        ? `${complementVehicle.brand} ${complementVehicle.model} (${complementVehicle.plate})`
+        : undefined,
       isThirdPartyRental: Boolean(updated.isThirdPartyRental || updated.allocationType === 'terceiros'),
       thirdPartyName: (updated.isThirdPartyRental || updated.allocationType === 'terceiros') ? updated.thirdPartyName?.trim() : undefined,
       workId: matchedDestWork?.id,

@@ -14,7 +14,8 @@ import {
   AlertCircle,
   CheckCircle2,
   FileSpreadsheet,
-  FileText
+  FileText,
+  Link2
 } from 'lucide-react';
 import {
   Vehicle,
@@ -113,6 +114,31 @@ export function LogisticsControl({
     [vehicles]
   );
 
+  // Non-complement vehicles eligible as primary (trator/truck) in Logistics schedules
+  const primaryLogisticsVehicles = useMemo(
+    () => logisticsVehicles.filter(v => !v.isComplement),
+    [logisticsVehicles]
+  );
+
+  // Active complement vehicles (carrocerias/reboques) available to pair
+  const complementVehicleOptions = useMemo(
+    () => vehicles.filter(v => Boolean(v.isComplement) && v.status !== 'inactive' && v.isActive !== false),
+    [vehicles]
+  );
+
+  // Vehicles displayed in status strip & matrix: all logistics-enabled vehicles + any active complement currently linked in schedules
+  const monitoredAndCoupledVehicles = useMemo(() => {
+    const map = new Map<string, Vehicle>();
+    logisticsVehicles.forEach(v => map.set(v.id, v));
+    schedules.forEach(s => {
+      if (s.complementVehicleId && !map.has(s.complementVehicleId)) {
+        const comp = vehicles.find(v => v.id === s.complementVehicleId && v.status !== 'inactive');
+        if (comp) map.set(comp.id, comp);
+      }
+    });
+    return Array.from(map.values());
+  }, [logisticsVehicles, schedules, vehicles]);
+
   // View & Calendar Month states
   const [viewMode, setViewMode] = useState<'matrix' | 'month' | 'list'>('matrix');
   const [currentMonthDate, setCurrentMonthDate] = useState(() => {
@@ -134,6 +160,7 @@ export function LogisticsControl({
   const [showModal, setShowModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<LogisticsSchedule | null>(null);
   const [formVehicleId, setFormVehicleId] = useState('');
+  const [formComplementVehicleId, setFormComplementVehicleId] = useState('');
   const [formScheduleStatus, setFormScheduleStatus] = useState<LogisticsScheduleStatus>('programado');
   const [formOriginMode, setFormOriginMode] = useState<'obra' | 'livre'>('livre');
   const [formOriginWorkId, setFormOriginWorkId] = useState('');
@@ -206,7 +233,7 @@ export function LogisticsControl({
   const filteredSchedules = useMemo(() => {
     return schedules
       .filter(s => {
-        if (filterVehicleId !== 'all' && s.vehicleId !== filterVehicleId) return false;
+        if (filterVehicleId !== 'all' && s.vehicleId !== filterVehicleId && s.complementVehicleId !== filterVehicleId) return false;
         if (filterLinkType === 'obra' && !s.workId) return false;
         if (filterLinkType === 'livre' && Boolean(s.workId)) return false;
         if (filterRental === 'rented' && !s.isThirdPartyRental) return false;
@@ -216,6 +243,7 @@ export function LogisticsControl({
           const q = searchQuery.toLowerCase().trim();
           const match =
             s.vehicleModelPlate.toLowerCase().includes(q) ||
+            (s.complementVehicleModelPlate && s.complementVehicleModelPlate.toLowerCase().includes(q)) ||
             s.destinationLabel.toLowerCase().includes(q) ||
             s.destinationCity.toLowerCase().includes(q) ||
             s.destinationState.toLowerCase().includes(q) ||
@@ -258,11 +286,11 @@ export function LogisticsControl({
     };
   }, [schedules, logisticsVehicles, vehicles, monthStartStr, monthEndStr]);
 
-  // Helper: get active/current schedule for a vehicle on a given date
+  // Helper: get active/current schedule for a vehicle (or coupled complement) on a given date
   const getVehicleSchedulesOnDate = (vehicleId: string, dateIso: string) => {
     return filteredSchedules.filter(
       s =>
-        s.vehicleId === vehicleId &&
+        (s.vehicleId === vehicleId || s.complementVehicleId === vehicleId) &&
         s.scheduleStatus !== 'cancelado' &&
         s.startDate <= dateIso &&
         s.endDate >= dateIso
@@ -272,7 +300,14 @@ export function LogisticsControl({
   // Modal Openers
   const openCreateModal = (prefillVehicleId?: string, prefillDate?: string) => {
     setEditingSchedule(null);
-    setFormVehicleId(prefillVehicleId || logisticsVehicles[0]?.id || '');
+    const prefilledVeh = prefillVehicleId ? vehicles.find(v => v.id === prefillVehicleId) : undefined;
+    if (prefilledVeh?.isComplement) {
+      setFormVehicleId(primaryLogisticsVehicles[0]?.id || '');
+      setFormComplementVehicleId(prefilledVeh.id);
+    } else {
+      setFormVehicleId(prefillVehicleId || primaryLogisticsVehicles[0]?.id || '');
+      setFormComplementVehicleId('');
+    }
     setFormScheduleStatus('programado');
     setFormOriginMode('livre');
     setFormOriginWorkId('');
@@ -299,6 +334,7 @@ export function LogisticsControl({
   const openEditModal = (schedule: LogisticsSchedule) => {
     setEditingSchedule(schedule);
     setFormVehicleId(schedule.vehicleId);
+    setFormComplementVehicleId(schedule.complementVehicleId || '');
     setFormScheduleStatus(schedule.scheduleStatus);
     const hasOriginWork = Boolean(schedule.originWorkId);
     setFormOriginMode(hasOriginWork ? 'obra' : 'livre');
@@ -435,6 +471,7 @@ export function LogisticsControl({
 
     const buildReturnPayload = () => ({
       vehicleId: formVehicleId,
+      complementVehicleId: formComplementVehicleId || undefined,
       allocationType: 'uso_programado' as LogisticsAllocationType,
       scheduleStatus: formScheduleStatus,
       isThirdPartyRental: Boolean(formIsThirdParty),
@@ -462,6 +499,7 @@ export function LogisticsControl({
       const res = store.updateLogisticsSchedule({
         ...editingSchedule,
         vehicleId: formVehicleId,
+        complementVehicleId: formComplementVehicleId || undefined,
         allocationType: 'uso_programado',
         scheduleStatus: formScheduleStatus,
         isThirdPartyRental: Boolean(formIsThirdParty),
@@ -501,6 +539,7 @@ export function LogisticsControl({
     } else {
       const res = store.addLogisticsSchedule({
         vehicleId: formVehicleId,
+        complementVehicleId: formComplementVehicleId || undefined,
         allocationType: 'uso_programado',
         scheduleStatus: formScheduleStatus,
         isThirdPartyRental: Boolean(formIsThirdParty),
@@ -572,10 +611,10 @@ export function LogisticsControl({
 
   const displayedMatrixVehicles = useMemo(() => {
     if (filterVehicleId !== 'all') {
-      return logisticsVehicles.filter(v => v.id === filterVehicleId);
+      return monitoredAndCoupledVehicles.filter(v => v.id === filterVehicleId);
     }
-    return logisticsVehicles;
-  }, [logisticsVehicles, filterVehicleId]);
+    return monitoredAndCoupledVehicles;
+  }, [monitoredAndCoupledVehicles, filterVehicleId]);
 
   const driversList = useMemo(
     () => users.filter(u => u.isActive && u.role !== 'abastecedor'),
@@ -696,7 +735,7 @@ export function LogisticsControl({
             <button
               type="button"
               onClick={() => openCreateModal()}
-              disabled={logisticsVehicles.length === 0}
+              disabled={primaryLogisticsVehicles.length === 0}
               className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 disabled:pointer-events-none rounded-xl transition-colors cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4" />
@@ -766,7 +805,14 @@ export function LogisticsControl({
                   }`}
                 >
                   <div className="min-w-0">
-                    <div className="font-mono text-xs font-bold text-slate-900">{v.plate}</div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-bold text-slate-900">{v.plate}</span>
+                      {v.isComplement && (
+                        <span className="text-[10px] font-bold px-1.5 py-0 rounded bg-indigo-100 text-indigo-800">
+                          Complemento
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs truncate">{v.brand} {v.model}</div>
                   </div>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded border whitespace-nowrap shrink-0 ${
@@ -861,10 +907,10 @@ export function LogisticsControl({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {logisticsVehicles.map(v => {
+              {monitoredAndCoupledVehicles.map(v => {
                 const todaySchedules = schedules.filter(
                   s =>
-                    s.vehicleId === v.id &&
+                    (s.vehicleId === v.id || s.complementVehicleId === v.id) &&
                     s.scheduleStatus !== 'cancelado' &&
                     s.scheduleStatus !== 'concluido' &&
                     s.startDate <= todayStr &&
@@ -873,7 +919,7 @@ export function LogisticsControl({
                 const nextSchedule = schedules
                   .filter(
                     s =>
-                      s.vehicleId === v.id &&
+                      (s.vehicleId === v.id || s.complementVehicleId === v.id) &&
                       s.scheduleStatus !== 'cancelado' &&
                       s.scheduleStatus !== 'concluido' &&
                       s.startDate > todayStr
@@ -882,6 +928,7 @@ export function LogisticsControl({
 
                 const activeS = todaySchedules[0];
                 const isRented = Boolean(activeS?.isThirdPartyRental || activeS?.allocationType === 'terceiros');
+                const isActingAsComplement = Boolean(activeS && activeS.complementVehicleId === v.id);
 
                 return (
                   <div
@@ -896,10 +943,15 @@ export function LogisticsControl({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-mono font-bold text-xs text-slate-900">{v.plate}</span>
                           <span className="text-slate-300" aria-hidden="true">·</span>
                           <span className="text-xs font-semibold text-slate-700 truncate">{v.brand} {v.model}</span>
+                          {v.isComplement && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              Complemento
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-500 mt-1 space-y-0.5">
                           {activeS ? (
@@ -908,6 +960,17 @@ export function LogisticsControl({
                                 <div className="text-violet-800 font-semibold">
                                   Locado para Terceiros: {activeS.thirdPartyName || activeS.destinationLabel} ({activeS.destinationCity}/{activeS.destinationState})
                                 </div>
+                                {isActingAsComplement ? (
+                                  <div className="text-[11px] text-indigo-700 font-semibold flex items-center gap-1">
+                                    <Link2 className="w-3 h-3 shrink-0" />
+                                    Acoplado a: {activeS.vehicleModelPlate}
+                                  </div>
+                                ) : activeS.complementVehicleModelPlate ? (
+                                  <div className="text-[11px] text-indigo-700 font-semibold flex items-center gap-1">
+                                    <Link2 className="w-3 h-3 shrink-0" />
+                                    + Complemento: {activeS.complementVehicleModelPlate}
+                                  </div>
+                                ) : null}
                                 {activeS.cargoDescription && (
                                   <div className="text-[11px] text-slate-600">Carga: {activeS.cargoDescription}</div>
                                 )}
@@ -917,15 +980,37 @@ export function LogisticsControl({
                                 <div className="text-slate-700 font-medium">
                                   {ALLOCATION_LABELS[activeS.allocationType]}: {activeS.workName || activeS.programDescription || activeS.destinationLabel} ({activeS.destinationCity}/{activeS.destinationState})
                                 </div>
+                                {isActingAsComplement ? (
+                                  <div className="text-[11px] text-indigo-700 font-semibold flex items-center gap-1">
+                                    <Link2 className="w-3 h-3 shrink-0" />
+                                    Acoplado a: {activeS.vehicleModelPlate}
+                                  </div>
+                                ) : activeS.complementVehicleModelPlate ? (
+                                  <div className="text-[11px] text-indigo-700 font-semibold flex items-center gap-1">
+                                    <Link2 className="w-3 h-3 shrink-0" />
+                                    + Complemento: {activeS.complementVehicleModelPlate}
+                                  </div>
+                                ) : null}
                                 {activeS.cargoDescription && (
                                   <div className="text-[11px] text-slate-600">Carga: {activeS.cargoDescription}</div>
                                 )}
                               </>
                             )
                           ) : nextSchedule ? (
-                            <span>
-                              Próximo destino ({formatDateBR(nextSchedule.startDate)}): {nextSchedule.destinationCity}/{nextSchedule.destinationState}
-                            </span>
+                            <div className="space-y-0.5">
+                              <span>
+                                Próximo destino ({formatDateBR(nextSchedule.startDate)}): {nextSchedule.destinationCity}/{nextSchedule.destinationState}
+                              </span>
+                              {nextSchedule.complementVehicleId === v.id ? (
+                                <div className="text-[11px] text-indigo-700 font-semibold">
+                                  Acoplado a: {nextSchedule.vehicleModelPlate}
+                                </div>
+                              ) : nextSchedule.complementVehicleModelPlate ? (
+                                <div className="text-[11px] text-indigo-700 font-semibold">
+                                  + Comp.: {nextSchedule.complementVehicleModelPlate}
+                                </div>
+                              ) : null}
+                            </div>
                           ) : (
                             <span>Disponível na base · Sem destino ativo hoje</span>
                           )}
@@ -1056,10 +1141,10 @@ export function LogisticsControl({
                 onChange={(e) => setFilterVehicleId(e.target.value)}
                 className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-none font-medium text-slate-700 cursor-pointer"
               >
-                <option value="all">Todos os Veículos ({logisticsVehicles.length})</option>
-                {logisticsVehicles.map(v => (
+                <option value="all">Todos os Veículos ({monitoredAndCoupledVehicles.length})</option>
+                {monitoredAndCoupledVehicles.map(v => (
                   <option key={v.id} value={v.id}>
-                    {v.plate} - {v.brand} {v.model}
+                    {v.plate} - {v.brand} {v.model}{v.isComplement ? ' (Complemento)' : ''}
                   </option>
                 ))}
               </select>
@@ -1132,7 +1217,14 @@ export function LogisticsControl({
                     {displayedMatrixVehicles.map(vehicle => (
                       <tr key={vehicle.id} className="hover:bg-slate-50/40">
                         <td className="sticky left-0 z-10 bg-white px-4 py-3 border-r border-slate-200 align-top">
-                          <div className="font-mono font-bold text-slate-900 text-xs">{vehicle.plate}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-900 text-xs">{vehicle.plate}</span>
+                            {vehicle.isComplement && (
+                              <span className="text-[9px] font-bold px-1.5 py-0 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                Comp.
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-slate-600 truncate max-w-[170px]">
                             {vehicle.brand} {vehicle.model}
                           </div>
@@ -1162,6 +1254,9 @@ export function LogisticsControl({
                               <div className="space-y-1">
                                 {dayItems.map(item => {
                                   const st = getScheduleVisualStyle(item);
+                                  const isComplementRow = item.complementVehicleId === vehicle.id;
+                                  const truckPlate = item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleModelPlate;
+                                  const compPlate = item.complementVehicleModelPlate?.match(/\(([^)]+)\)/)?.[1] || item.complementVehicleModelPlate;
                                   return (
                                     <button
                                       key={item.id}
@@ -1171,7 +1266,7 @@ export function LogisticsControl({
                                         if (canManage) openEditModal(item);
                                       }}
                                       className={`w-full text-left px-1.5 py-1 rounded border text-[10px] leading-tight transition-opacity hover:opacity-90 ${st.bg} ${canManage ? 'cursor-pointer' : 'cursor-default'}`}
-                                      title={`${ALLOCATION_LABELS[item.allocationType]}: ${item.workName || item.programDescription || item.destinationLabel} (${item.destinationCity}/${item.destinationState})${item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''}${item.isThirdPartyRental && item.thirdPartyName ? ` | Locado para: ${item.thirdPartyName}` : ''}`}
+                                      title={`${item.vehicleModelPlate}${item.complementVehicleModelPlate ? ` + Complemento: ${item.complementVehicleModelPlate}` : ''} | ${ALLOCATION_LABELS[item.allocationType]}: ${item.workName || item.programDescription || item.destinationLabel} (${item.destinationCity}/${item.destinationState})${item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''}${item.isThirdPartyRental && item.thirdPartyName ? ` | Locado para: ${item.thirdPartyName}` : ''}`}
                                     >
                                       <div className="font-bold truncate">
                                         {item.isThirdPartyRental
@@ -1181,6 +1276,15 @@ export function LogisticsControl({
                                       <div className="text-[9px] opacity-85 truncate">
                                         {item.destinationCity}/{item.destinationState}
                                       </div>
+                                      {isComplementRow ? (
+                                        <div className="text-[8.5px] font-mono font-bold text-indigo-800 truncate">
+                                          c/ {truckPlate}
+                                        </div>
+                                      ) : compPlate ? (
+                                        <div className="text-[8.5px] font-mono font-bold text-indigo-800 truncate">
+                                          + {compPlate}
+                                        </div>
+                                      ) : null}
                                     </button>
                                   );
                                 })}
@@ -1244,16 +1348,21 @@ export function LogisticsControl({
                         {daySchedules.map(item => {
                           const st = getScheduleVisualStyle(item);
                           const plate = item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
+                          const compPlate = item.complementVehicleModelPlate?.match(/\(([^)]+)\)/)?.[1] || item.complementVehicleId;
                           return (
                             <button
                               key={item.id}
                               type="button"
                               onClick={() => { if (canManage) openEditModal(item); }}
                               className={`w-full text-left px-2 py-1 rounded border text-[10px] leading-tight ${st.bg} ${canManage ? 'cursor-pointer' : 'cursor-default'}`}
-                              title={`${plate} - ${item.workName || item.programDescription || item.destinationLabel} (${item.destinationCity}/${item.destinationState})${item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''}`}
+                              title={`${plate}${compPlate ? ` + ${compPlate} (Complemento)` : ''} - ${item.workName || item.programDescription || item.destinationLabel} (${item.destinationCity}/${item.destinationState})${item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''}`}
                             >
                               <div className="font-bold truncate">
-                                <span className="font-mono">{plate}</span> · {item.destinationCity}/{item.destinationState}
+                                <span className="font-mono">
+                                  {plate}
+                                  {compPlate && <span className="text-indigo-700"> + {compPlate}</span>}
+                                </span>{' '}
+                                · {item.destinationCity}/{item.destinationState}
                               </div>
                               <div className="text-[9px] truncate opacity-85">
                                 {item.isThirdPartyRental
@@ -1318,8 +1427,14 @@ export function LogisticsControl({
                           <tr key={item.id} className="hover:bg-slate-50/70">
                             <td className="px-4 py-3 font-semibold text-slate-900">
                               <div>{item.vehicleModelPlate}</div>
+                              {item.complementVehicleModelPlate && (
+                                <div className="text-[11px] font-semibold text-indigo-700 flex items-center gap-1 mt-0.5">
+                                  <Link2 className="w-3 h-3 shrink-0" />
+                                  <span>+ Comp.: {item.complementVehicleModelPlate}</span>
+                                </div>
+                              )}
                               {item.driverName && (
-                                <div className="text-[11px] font-normal text-slate-500">
+                                <div className="text-[11px] font-normal text-slate-500 mt-0.5">
                                   Condutor: {item.driverName}
                                 </div>
                               )}
@@ -1461,10 +1576,10 @@ export function LogisticsControl({
                 ))}
               </datalist>
 
-              {/* Vehicle & Status */}
+              {/* Vehicle, Coupled Complement & Status */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700">Veículo *</label>
+                  <label className="block text-xs font-bold text-slate-700">Veículo Principal (Não Complemento) *</label>
                   <select
                     value={formVehicleId}
                     onChange={(e) => setFormVehicleId(e.target.value)}
@@ -1472,7 +1587,7 @@ export function LogisticsControl({
                     required
                   >
                     <option value="">Selecione um veículo...</option>
-                    {logisticsVehicles.map(v => (
+                    {primaryLogisticsVehicles.map(v => (
                       <option key={v.id} value={v.id}>
                         [{v.plate}] {v.brand} {v.model}
                       </option>
@@ -1492,6 +1607,28 @@ export function LogisticsControl({
                     <option value="concluido">Concluído</option>
                     <option value="cancelado">Cancelado</option>
                   </select>
+                </div>
+
+                <div className="sm:col-span-2 bg-indigo-50/60 border border-indigo-200 rounded-xl p-3.5 space-y-1.5">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+                    <Link2 className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Complemento / Carroceria Acoplada (Opcional)</span>
+                  </label>
+                  <select
+                    value={formComplementVehicleId}
+                    onChange={(e) => setFormComplementVehicleId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white border border-indigo-200 rounded-xl outline-none focus:border-indigo-500 font-semibold text-slate-800"
+                  >
+                    <option value="">Sem complemento (apenas o veículo principal)</option>
+                    {complementVehicleOptions.map(c => (
+                      <option key={c.id} value={c.id}>
+                        [{c.plate}] {c.brand} {c.model} — Complemento
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-indigo-800">
+                    Quando acoplado, tanto o veículo principal quanto o complemento aparecem juntos nas agendas e relatórios de logística.
+                  </p>
                 </div>
               </div>
 

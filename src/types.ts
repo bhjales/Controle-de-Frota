@@ -57,6 +57,7 @@ export interface Vehicle {
   category?: string;
   tankCapacityLiters?: number; // Tamanho do tanque em Litros
   hasLogisticsControl?: boolean; // Indica se o veículo participa do Controle de Logística
+  isComplement?: boolean; // Indica se o veículo é um complemento (carroceria/reboque)
 }
 
 export interface VehicleCategory {
@@ -87,6 +88,30 @@ export interface CheckOutDetails {
   time: string;
 }
 
+export interface PlannedLogisticsSnapshot {
+  scheduleId: string;
+  vehicleId: string;
+  vehicleModelPlate: string;
+  complementVehicleId?: string;
+  complementVehicleModelPlate?: string;
+  originLabel?: string;
+  originCity?: string;
+  originState?: string;
+  destinationLabel: string;
+  destinationCity: string;
+  destinationState: string;
+  workId?: string;
+  workName?: string;
+  cargoDescription?: string;
+  startDate: string;
+  endDate: string;
+  driverId?: string;
+  driverName?: string;
+  isThirdPartyRental?: boolean;
+  thirdPartyName?: string;
+  notes?: string;
+}
+
 export interface Trip {
   id: string;
   driverId: string;
@@ -94,6 +119,10 @@ export interface Trip {
   driverEmail?: string;
   vehicleId: string;
   vehicleModelPlate: string;
+  complementVehicleId?: string;
+  complementVehicleModelPlate?: string;
+  logisticsScheduleId?: string;
+  plannedSnapshot?: PlannedLogisticsSnapshot;
   status: 'active' | 'completed';
   workId?: string; // Associated construction work (Obra)
   workName?: string;
@@ -276,6 +305,8 @@ export interface LogisticsSchedule {
   id: string;
   vehicleId: string;
   vehicleModelPlate: string;
+  complementVehicleId?: string;
+  complementVehicleModelPlate?: string;
   allocationType: LogisticsAllocationType;
   scheduleStatus: LogisticsScheduleStatus;
   isThirdPartyRental: boolean; // Status se o veículo será locado para terceiros
