@@ -137,7 +137,7 @@ export function TvDashboard({
     if (!isAutoplay) return;
     const interval = setInterval(() => {
       setCurrentSlide(prev => (prev + 1) % totalSlides);
-    }, 12000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [isAutoplay, totalSlides]);
 
@@ -441,83 +441,83 @@ export function TvDashboard({
           <div className="flex-1 min-h-0 flex flex-col gap-2.5 overflow-hidden animate-fade-in">
             {/* 4 KPI Cards */}
             <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3 flex flex-col justify-between gap-1.5">
+              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between gap-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono font-bold text-slate-400">
+                  <span className="text-xs sm:text-sm lg:text-base font-mono font-bold text-slate-300">
                     Frota de Veículos
                   </span>
-                  <Truck className="w-4 h-4 text-blue-400" />
+                  <Truck className="w-5 h-5 text-blue-400 shrink-0" />
                 </div>
                 <div className="flex items-baseline justify-between font-mono tabular-nums">
-                  <span className="text-2xl sm:text-3xl font-black text-white leading-none">{totalVehicles}</span>
-                  <span className="text-xs text-emerald-400 font-bold">
+                  <span className="text-3xl sm:text-4xl xl:text-5xl font-black text-white leading-none">{totalVehicles}</span>
+                  <span className="text-sm sm:text-base lg:text-lg text-emerald-400 font-bold">
                     {availableVehicles} Disp.
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums pt-1 border-t border-slate-800/80 text-slate-400">
-                  <span className="text-indigo-400 font-semibold">{inUseVehicles} Uso</span>
-                  <span className="text-amber-400 font-semibold">{maintenanceVehicles} Ofic.</span>
-                  <span className="text-rose-400 font-semibold">{inactiveVehicles} Inat.</span>
+                <div className="flex items-center justify-between text-xs sm:text-sm font-mono tabular-nums pt-1.5 border-t border-slate-800/80 text-slate-400">
+                  <span className="text-indigo-400 font-bold">{inUseVehicles} Uso</span>
+                  <span className="text-amber-400 font-bold">{maintenanceVehicles} Ofic.</span>
+                  <span className="text-rose-400 font-bold">{inactiveVehicles} Inat.</span>
                 </div>
               </div>
 
-              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3 flex flex-col justify-between gap-1.5">
+              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between gap-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono font-bold text-slate-400">
+                  <span className="text-xs sm:text-sm lg:text-base font-mono font-bold text-slate-300">
                     Maquinários & Pesados
                   </span>
-                  <Gauge className="w-4 h-4 text-purple-400" />
+                  <Gauge className="w-5 h-5 text-purple-400 shrink-0" />
                 </div>
                 <div className="flex items-baseline justify-between font-mono tabular-nums">
-                  <span className="text-2xl sm:text-3xl font-black text-white leading-none">{totalEquipments}</span>
-                  <span className="text-xs text-emerald-400 font-bold">
+                  <span className="text-3xl sm:text-4xl xl:text-5xl font-black text-white leading-none">{totalEquipments}</span>
+                  <span className="text-sm sm:text-base lg:text-lg text-emerald-400 font-bold">
                     {availableEquipments} Disp.
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums pt-1 border-t border-slate-800/80 text-slate-400">
-                  <span className="text-indigo-400 font-semibold">
+                <div className="flex items-center justify-between text-xs sm:text-sm font-mono tabular-nums pt-1.5 border-t border-slate-800/80 text-slate-400">
+                  <span className="text-indigo-400 font-bold">
                     {Math.max(inUseEquipments, activeEquipmentsCount)} Oper.
                   </span>
-                  <span className="text-amber-400 font-semibold">{maintenanceEquipments} Manut.</span>
+                  <span className="text-amber-400 font-bold">{maintenanceEquipments} Manut.</span>
                 </div>
               </div>
 
-              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3 flex flex-col justify-between gap-1.5">
+              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between gap-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono font-bold text-slate-400">
+                  <span className="text-xs sm:text-sm lg:text-base font-mono font-bold text-slate-300">
                     Viagens & Logística
                   </span>
-                  <Activity className="w-4 h-4 text-indigo-400" />
+                  <Activity className="w-5 h-5 text-indigo-400 shrink-0" />
                 </div>
                 <div className="flex items-baseline justify-between font-mono tabular-nums">
-                  <span className="text-2xl sm:text-3xl font-black text-white leading-none">{activeTrips.length}</span>
-                  <span className="text-xs text-sky-400 font-bold">
+                  <span className="text-3xl sm:text-4xl xl:text-5xl font-black text-white leading-none">{activeTrips.length}</span>
+                  <span className="text-sm sm:text-base lg:text-lg text-sky-400 font-bold">
                     {logisticsEnabledVehicles} Logística
                   </span>
                 </div>
-                <div className="pt-1 border-t border-slate-800/80 text-[11px] font-mono text-slate-300 truncate">
+                <div className="pt-1.5 border-t border-slate-800/80 text-xs sm:text-sm font-mono text-slate-300 truncate">
                   {activeTrips.length > 0
                     ? `Em rota: ${activeTrips[0].vehicleModelPlate}`
                     : `${monthLogisticsSchedules.length} agendas em ${MONTH_NAMES[currentMonth]}`}
                 </div>
               </div>
 
-              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3 flex flex-col justify-between gap-1.5">
+              <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between gap-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono font-bold text-slate-400">
+                  <span className="text-xs sm:text-sm lg:text-base font-mono font-bold text-slate-300">
                     Combustível & Obras
                   </span>
-                  <Fuel className="w-4 h-4 text-amber-400" />
+                  <Fuel className="w-5 h-5 text-amber-400 shrink-0" />
                 </div>
                 <div className="flex items-baseline justify-between font-mono tabular-nums">
-                  <span className="text-2xl sm:text-3xl font-black text-white leading-none">
+                  <span className="text-3xl sm:text-4xl xl:text-5xl font-black text-white leading-none">
                     {totalFuelStock.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L
                   </span>
-                  <span className="text-xs text-amber-400 font-bold">
+                  <span className="text-sm sm:text-base lg:text-lg text-amber-400 font-bold">
                     {works.length} Obras
                   </span>
                 </div>
-                <div className="pt-1 border-t border-slate-800/80 text-[11px] font-mono tabular-nums text-slate-300 truncate">
+                <div className="pt-1.5 border-t border-slate-800/80 text-xs sm:text-sm font-mono tabular-nums text-slate-300 truncate">
                   Consumo: {totalFuelConsumed.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} L
                 </div>
               </div>
@@ -528,51 +528,51 @@ export function TvDashboard({
               {/* Veículos por Categoria */}
               <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3.5 flex flex-col min-h-0 overflow-hidden">
                 <div className="shrink-0 flex items-center justify-between border-b border-slate-800 pb-2 mb-1.5">
-                  <h3 className="text-sm font-black text-white flex items-center gap-2 font-display">
-                    <Layers className="w-4 h-4 text-blue-400" />
+                  <h3 className="text-base sm:text-lg lg:text-xl font-black text-white flex items-center gap-2 font-display">
+                    <Layers className="w-5 h-5 text-blue-400 shrink-0" />
                     Veículos por Categoria
                   </h3>
-                  <span className="text-[11px] font-mono font-bold tabular-nums text-blue-400">
+                  <span className="text-sm sm:text-base font-mono font-bold tabular-nums text-blue-400">
                     Ativos: {totalVehicles}
                   </span>
                 </div>
 
                 {vehiclesByCategory.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">
+                  <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
                     Nenhum veículo ativo cadastrado.
                   </div>
                 ) : (
                   <div className="flex-1 min-h-0 overflow-hidden">
-                    <table className="w-full text-xs font-mono tabular-nums">
+                    <table className="w-full text-sm sm:text-base xl:text-lg font-mono tabular-nums">
                       <thead>
-                        <tr className="text-[10px] text-slate-400 border-b border-slate-800/90">
-                          <th className="text-left py-1 pr-2 font-bold">Categoria</th>
-                          <th className="text-right py-1 px-1.5 font-bold text-blue-400">Qtd</th>
-                          <th className="text-right py-1 px-1.5 font-bold text-emerald-400">Disp.</th>
-                          <th className="text-right py-1 px-1.5 font-bold text-indigo-400">Uso</th>
-                          <th className="text-right py-1 px-1.5 font-bold text-amber-400">Ofic.</th>
-                          <th className="text-right py-1 pl-1.5 font-bold text-sky-400">Log.</th>
+                        <tr className="text-xs sm:text-sm text-slate-400 border-b border-slate-800/90">
+                          <th className="text-left py-1.5 pr-2 font-bold">Categoria</th>
+                          <th className="text-right py-1.5 px-2 font-bold text-blue-400">Qtd</th>
+                          <th className="text-right py-1.5 px-2 font-bold text-emerald-400">Disp.</th>
+                          <th className="text-right py-1.5 px-2 font-bold text-indigo-400">Uso</th>
+                          <th className="text-right py-1.5 px-2 font-bold text-amber-400">Ofic.</th>
+                          <th className="text-right py-1.5 pl-2 font-bold text-sky-400">Log.</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
                         {vehiclesByCategory.slice(0, 11).map(item => (
                           <tr key={item.category} className="hover:bg-slate-900/60">
-                            <td className="py-1.5 pr-2 font-sans font-bold text-white capitalize truncate max-w-[180px]">
+                            <td className="py-1 pr-2 font-sans font-bold text-white capitalize truncate max-w-[260px]">
                               {item.category}
                             </td>
-                            <td className="py-1.5 px-1.5 text-right font-black text-blue-400">
+                            <td className="py-1 px-2 text-right font-black text-blue-400">
                               {item.total}
                             </td>
-                            <td className="py-1.5 px-1.5 text-right font-bold text-emerald-400">
+                            <td className="py-1 px-2 text-right font-bold text-emerald-400">
                               {item.available}
                             </td>
-                            <td className="py-1.5 px-1.5 text-right font-bold text-indigo-400">
+                            <td className="py-1 px-2 text-right font-bold text-indigo-400">
                               {item.inUse}
                             </td>
-                            <td className="py-1.5 px-1.5 text-right font-bold text-amber-400">
+                            <td className="py-1 px-2 text-right font-bold text-amber-400">
                               {item.maintenance}
                             </td>
-                            <td className="py-1.5 pl-1.5 text-right font-bold text-sky-400">
+                            <td className="py-1 pl-2 text-right font-bold text-sky-400">
                               {item.logistics}
                             </td>
                           </tr>
@@ -586,47 +586,47 @@ export function TvDashboard({
               {/* Maquinários por Tipo */}
               <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3.5 flex flex-col min-h-0 overflow-hidden">
                 <div className="shrink-0 flex items-center justify-between border-b border-slate-800 pb-2 mb-1.5">
-                  <h3 className="text-sm font-black text-white flex items-center gap-2 font-display">
-                    <Gauge className="w-4 h-4 text-purple-400" />
+                  <h3 className="text-base sm:text-lg lg:text-xl font-black text-white flex items-center gap-2 font-display">
+                    <Gauge className="w-5 h-5 text-purple-400 shrink-0" />
                     Maquinários por Tipo
                   </h3>
-                  <span className="text-[11px] font-mono font-bold tabular-nums text-purple-400">
+                  <span className="text-sm sm:text-base font-mono font-bold tabular-nums text-purple-400">
                     Total: {totalEquipments}
                   </span>
                 </div>
 
                 {equipmentsByType.length === 0 ? (
-                  <div className="flex-1 flex items-center justify-center text-slate-400 text-xs">
+                  <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
                     Nenhum maquinário cadastrado.
                   </div>
                 ) : (
                   <div className="flex-1 min-h-0 overflow-hidden">
-                    <table className="w-full text-xs font-mono tabular-nums">
+                    <table className="w-full text-sm sm:text-base xl:text-lg font-mono tabular-nums">
                       <thead>
-                        <tr className="text-[10px] text-slate-400 border-b border-slate-800/90">
-                          <th className="text-left py-1 pr-2 font-bold">Tipo de Equipamento</th>
-                          <th className="text-right py-1 px-2 font-bold text-purple-400">Qtd</th>
-                          <th className="text-right py-1 px-2 font-bold text-emerald-400">Disp.</th>
-                          <th className="text-right py-1 px-2 font-bold text-indigo-400">Oper.</th>
-                          <th className="text-right py-1 pl-2 font-bold text-amber-400">Manut.</th>
+                        <tr className="text-xs sm:text-sm text-slate-400 border-b border-slate-800/90">
+                          <th className="text-left py-1.5 pr-2 font-bold">Tipo de Equipamento</th>
+                          <th className="text-right py-1.5 px-2 font-bold text-purple-400">Qtd</th>
+                          <th className="text-right py-1.5 px-2 font-bold text-emerald-400">Disp.</th>
+                          <th className="text-right py-1.5 px-2 font-bold text-indigo-400">Oper.</th>
+                          <th className="text-right py-1.5 pl-2 font-bold text-amber-400">Manut.</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
                         {equipmentsByType.slice(0, 11).map(item => (
                           <tr key={item.type} className="hover:bg-slate-900/60">
-                            <td className="py-1.5 pr-2 font-sans font-bold text-white truncate max-w-[200px]">
+                            <td className="py-1 pr-2 font-sans font-bold text-white truncate max-w-[260px]">
                               {item.type}
                             </td>
-                            <td className="py-1.5 px-2 text-right font-black text-purple-400">
+                            <td className="py-1 px-2 text-right font-black text-purple-400">
                               {item.total}
                             </td>
-                            <td className="py-1.5 px-2 text-right font-bold text-emerald-400">
+                            <td className="py-1 px-2 text-right font-bold text-emerald-400">
                               {item.available}
                             </td>
-                            <td className="py-1.5 px-2 text-right font-bold text-indigo-400">
+                            <td className="py-1 px-2 text-right font-bold text-indigo-400">
                               {item.inUse}
                             </td>
-                            <td className="py-1.5 pl-2 text-right font-bold text-amber-400">
+                            <td className="py-1 pl-2 text-right font-bold text-amber-400">
                               {item.maintenance}
                             </td>
                           </tr>
@@ -646,16 +646,16 @@ export function TvDashboard({
             <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 shrink-0">
-                  <CalendarRange className="w-4 h-4" />
+                  <CalendarRange className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm sm:text-base font-black text-white font-display truncate">
+                  <h3 className="text-base sm:text-xl font-black text-white font-display truncate">
                     Calendário Mensal de Logística — {MONTH_NAMES[currentMonth]} de {currentYear}
                   </h3>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 text-[11px] font-mono tabular-nums shrink-0">
+              <div className="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-mono tabular-nums shrink-0">
                 <span className="text-blue-300 font-bold">
                   {monthLogisticsSchedules.length} Programações
                 </span>
@@ -685,10 +685,10 @@ export function TvDashboard({
                     })
                   }
                   disabled={monthLogisticsSchedules.length === 0}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/35 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/35 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   title="Exportar Calendário do Mês em CSV (Excel)"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <FileSpreadsheet className="w-4 h-4" />
                   CSV
                 </button>
                 <button
@@ -704,10 +704,10 @@ export function TvDashboard({
                       scopeDescription: `Painel TV - Agenda de ${MONTH_NAMES[currentMonth]} de ${currentYear}`,
                     })
                   }
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/50 font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/50 font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   title="Exportar Calendário do Mês em PDF (Offline)"
                 >
-                  <FileText className="w-3.5 h-3.5" />
+                  <FileText className="w-4 h-4" />
                   PDF
                 </button>
               </div>
@@ -718,7 +718,7 @@ export function TvDashboard({
                 {WEEKDAY_NAMES.map(wd => (
                   <div
                     key={wd}
-                    className="py-1 text-center text-[11px] font-bold text-slate-300 border-r last:border-r-0 border-slate-800 font-mono"
+                    className="py-1.5 text-center text-xs sm:text-sm lg:text-base font-bold text-slate-200 border-r last:border-r-0 border-slate-800 font-mono"
                   >
                     {wd}
                   </div>
@@ -746,6 +746,13 @@ export function TvDashboard({
                       ? 'grid grid-cols-2 gap-0.5 content-start'
                       : 'flex flex-col gap-0.5';
 
+                  const chipSizeClass =
+                    daySchedules.length >= 7
+                      ? 'text-[10px] sm:text-[11px] px-1 py-[1px]'
+                      : daySchedules.length >= 4
+                      ? 'text-[11px] sm:text-xs px-1.5 py-0.5'
+                      : 'text-xs sm:text-sm px-1.5 py-0.5';
+
                   return (
                     <div
                       key={d.iso}
@@ -759,14 +766,14 @@ export function TvDashboard({
                     >
                       <div className="shrink-0 flex items-center justify-between">
                         <span
-                          className={`text-[10px] font-mono font-bold tabular-nums px-1 py-0 rounded ${
-                            isToday ? 'bg-blue-600 text-white' : 'text-slate-300'
+                          className={`text-xs sm:text-sm font-mono font-black tabular-nums px-1.5 py-0 rounded ${
+                            isToday ? 'bg-blue-600 text-white' : 'text-slate-200'
                           }`}
                         >
                           {String(d.day).padStart(2, '0')}
                         </span>
                         {daySchedules.length > 0 && (
-                          <span className="text-[9px] font-mono font-bold text-slate-400">
+                          <span className="text-[11px] sm:text-xs font-mono font-bold text-slate-300">
                             {daySchedules.length}x
                           </span>
                         )}
@@ -787,15 +794,13 @@ export function TvDashboard({
                           return (
                             <div
                               key={item.id}
-                              className={`px-1 py-[1px] rounded border leading-[1.2] flex items-center gap-1 min-w-0 ${
-                                daySchedules.length >= 7 ? 'text-[7.5px]' : 'text-[8.5px]'
-                              } ${colorStyle.chip}`}
+                              className={`rounded border leading-[1.2] flex items-center gap-1 min-w-0 ${chipSizeClass} ${colorStyle.chip}`}
                               title={`${plate}${compPlate ? ` + ${compPlate} (Complemento)` : ''} | ${item.destinationLabel} (${item.destinationCity}/${item.destinationState})${
                                 item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''
                               }`}
                             >
                               <span
-                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${colorStyle.dot}`}
+                                className={`w-2 h-2 rounded-full shrink-0 ${colorStyle.dot}`}
                               />
                               <span className="truncate">
                                 <span className="font-mono font-bold">{plateDisplay}</span>
@@ -818,7 +823,7 @@ export function TvDashboard({
             </div>
 
             {/* Legenda individual de todas as programações do mês por cor */}
-            <div className="shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-300 font-mono">
+            <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm text-slate-300 font-mono">
               {monthLogisticsSchedules.length === 0 ? (
                 <span className="text-slate-500">Nenhuma programação ativa neste mês.</span>
               ) : (
@@ -833,10 +838,10 @@ export function TvDashboard({
                   return (
                     <span
                       key={item.id}
-                      className="inline-flex items-center gap-1.5 max-w-[260px]"
+                      className="inline-flex items-center gap-1.5 max-w-[340px]"
                       title={`${item.vehicleModelPlate}${item.complementVehicleModelPlate ? ` + Complemento: ${item.complementVehicleModelPlate}` : ''} -> ${item.destinationLabel} (${item.startDate} até ${item.endDate})`}
                     >
-                      <span className={`w-2.5 h-2.5 rounded-xs shrink-0 ${colorStyle.dot}`} />
+                      <span className={`w-3 h-3 rounded-xs shrink-0 ${colorStyle.dot}`} />
                       <span className="truncate">
                         <strong className="text-white">{plateDisplay}</strong> ·{' '}
                         {item.isThirdPartyRental
@@ -848,8 +853,8 @@ export function TvDashboard({
                 })
               )}
               {monthLogisticsSchedules.some(s => Boolean(s.cargoDescription)) && (
-                <span className="flex items-center gap-1 ml-auto text-slate-400 shrink-0">
-                  <Package className="w-3 h-3" />
+                <span className="flex items-center gap-1.5 ml-auto text-slate-400 shrink-0">
+                  <Package className="w-3.5 h-3.5" />
                   Cores individuais por programação
                 </span>
               )}
