@@ -172,7 +172,6 @@ export function TvDashboard({
   const availableVehicles = activeFleetVehicles.filter(v => v.status === 'available').length;
   const inUseVehicles = activeFleetVehicles.filter(v => v.status === 'in_use').length;
   const maintenanceVehicles = activeFleetVehicles.filter(v => v.status === 'maintenance').length;
-  const inactiveVehicles = vehicles.filter(v => v.status === 'inactive' || v.isActive === false).length;
   const logisticsEnabledVehicles = activeFleetVehicles.filter(v => Boolean(v.hasLogisticsControl)).length;
 
   const totalEquipments = equipments.length;
@@ -444,7 +443,7 @@ export function TvDashboard({
               <div className="bg-[#0F172A] border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between gap-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs sm:text-sm lg:text-base font-mono font-bold text-slate-300">
-                    Frota de Veículos
+                    Frota Ativa de Veículos
                   </span>
                   <Truck className="w-5 h-5 text-blue-400 shrink-0" />
                 </div>
@@ -457,7 +456,6 @@ export function TvDashboard({
                 <div className="flex items-center justify-between text-xs sm:text-sm font-mono tabular-nums pt-1.5 border-t border-slate-800/80 text-slate-400">
                   <span className="text-indigo-400 font-bold">{inUseVehicles} Uso</span>
                   <span className="text-amber-400 font-bold">{maintenanceVehicles} Ofic.</span>
-                  <span className="text-rose-400 font-bold">{inactiveVehicles} Inat.</span>
                 </div>
               </div>
 
