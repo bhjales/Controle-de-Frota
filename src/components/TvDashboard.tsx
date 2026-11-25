@@ -133,13 +133,22 @@ export function TvDashboard({
     return () => clearInterval(timer);
   }, []);
 
+  const activeMapLogisticsCount = useMemo(
+    () => logisticsSchedules.filter(s => s.scheduleStatus !== 'cancelado').length,
+    [logisticsSchedules]
+  );
+
   useEffect(() => {
     if (!isAutoplay) return;
-    const interval = setInterval(() => {
+    const durationMs =
+      currentSlide === 3
+        ? Math.max(60000, 10000 + activeMapLogisticsCount * 10000 + 2000)
+        : 60000;
+    const timeout = setTimeout(() => {
       setCurrentSlide(prev => (prev + 1) % totalSlides);
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [isAutoplay, totalSlides]);
+    }, durationMs);
+    return () => clearTimeout(timeout);
+  }, [isAutoplay, currentSlide, totalSlides, activeMapLogisticsCount]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -1033,7 +1042,7 @@ export function TvDashboard({
                   ·
                 </span>
                 <span className="text-purple-300 font-bold">
-                  {monthLogisticsSchedules.length} Rotas no Mês
+                  {activeMapLogisticsCount} Logísticas no Mapa
                 </span>
               </div>
             </div>
@@ -1045,6 +1054,9 @@ export function TvDashboard({
                   trips={trips}
                   logisticsSchedules={logisticsSchedules}
                   heightClass="h-full min-h-[260px]"
+                  autoFocusLogistics
+                  autoFocusIntervalMs={10000}
+                  initialOverviewDelayMs={10000}
                 />
               </div>
 

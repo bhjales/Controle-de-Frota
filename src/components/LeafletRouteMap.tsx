@@ -2,7 +2,17 @@ import React from 'react';
 import L from 'leaflet';
 import { ConstructionWork, Trip, LogisticsSchedule } from '../types';
 
-const cityCoordsCache: Record<string, [number, number]> = {
+const GEO_STORAGE_KEY = 'frotacontrol_city_coords_v1';
+
+function normalizeGeoText(value: string): string {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+const rawCityCoords: Record<string, [number, number]> = {
   'são paulo': [-23.5505, -46.6333],
   'sao paulo': [-23.5505, -46.6333],
   'campinas': [-22.9056, -47.0608],
@@ -49,7 +59,55 @@ const cityCoordsCache: Record<string, [number, number]> = {
   'porto nacional': [-10.7069, -48.4169],
   'paraíso do tocantins': [-10.1749, -48.8825],
   'paraiso do tocantins': [-10.1749, -48.8825],
+  'colinas do tocantins': [-8.0592, -48.4747],
+  'guaraí': [-8.8339, -48.5106],
+  'guarai': [-8.8339, -48.5106],
+  'miracema do tocantins': [-9.5672, -48.3919],
+  'dianópolis': [-11.6275, -46.8206],
+  'dianopolis': [-11.6275, -46.8206],
+  'tocantinópolis': [-6.3292, -47.4161],
+  'tocantinopolis': [-6.3292, -47.4161],
+  'formoso do araguaia': [-11.7972, -49.5289],
+  'pedro afonso': [-8.9675, -48.1747],
 };
+
+const cityCoordsCache: Record<string, [number, number]> = (() => {
+  const initial: Record<string, [number, number]> = {};
+  Object.entries(rawCityCoords).forEach(([k, v]) => {
+    initial[k] = v;
+    initial[normalizeGeoText(k)] = v;
+  });
+  try {
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem(GEO_STORAGE_KEY) : null;
+    if (saved) {
+      const parsed = JSON.parse(saved) as Record<string, [number, number]>;
+      Object.entries(parsed).forEach(([k, v]) => {
+        if (Array.isArray(v) && v.length === 2 && Number.isFinite(v[0]) && Number.isFinite(v[1])) {
+          initial[k] = v;
+        }
+      });
+    }
+  } catch {
+    // Ignore storage read error
+  }
+  return initial;
+})();
+
+const inFlightGeoLookups = new Map<string, Promise<[number, number]>>();
+
+function persistGeoCacheEntry(key: string, coords: [number, number]) {
+  cityCoordsCache[key] = coords;
+  try {
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem(GEO_STORAGE_KEY);
+      const parsed = saved ? (JSON.parse(saved) as Record<string, [number, number]>) : {};
+      parsed[key] = coords;
+      window.localStorage.setItem(GEO_STORAGE_KEY, JSON.stringify(parsed));
+    }
+  } catch {
+    // Ignore storage write error
+  }
+}
 
 const stateCenters: Record<string, [number, number]> = {
   sp: [-23.5505, -46.6333],
@@ -83,42 +141,57 @@ const stateCenters: Record<string, [number, number]> = {
 
 export async function resolveCityCoordinates(city: string, state: string): Promise<[number, number]> {
   const cleanCity = (city || '').trim().toLowerCase();
-  const cleanState = (state || '').trim().toLowerCase();
-  const cacheKey = cleanState ? `${cleanCity}|${cleanState}` : cleanCity;
+  const normCity = normalizeGeoText(city || '');
+  const cleanState = normalizeGeoText(state || '');
+  const cacheKey = cleanState ? `${normCity}|${cleanState}` : normCity;
+  const rawKey = cleanState ? `${cleanCity}|${cleanState}` : cleanCity;
 
-  if (cityCoordsCache[cacheKey]) {
-    return cityCoordsCache[cacheKey];
-  }
-  if (!cleanState && cityCoordsCache[cleanCity]) {
-    return cityCoordsCache[cleanCity];
-  }
+  if (cityCoordsCache[cacheKey]) return cityCoordsCache[cacheKey];
+  if (cityCoordsCache[rawKey]) return cityCoordsCache[rawKey];
+  if (!cleanState && cityCoordsCache[normCity]) return cityCoordsCache[normCity];
+  if (!cleanState && cityCoordsCache[cleanCity]) return cityCoordsCache[cleanCity];
+  if (!normCity) return stateCenters[cleanState] || [-10.184, -48.3336];
 
-  try {
-    const query = cleanState ? `${city}, ${state}, Brazil` : `${city}, Brazil`;
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
-      { headers: { 'Accept-Language': 'pt-BR' } }
-    );
-    const data = await res.json();
-    if (data && data.length > 0) {
-      const lat = parseFloat(data[0].lat);
-      const lon = parseFloat(data[0].lon);
-      cityCoordsCache[cacheKey] = [lat, lon];
-      return [lat, lon];
+  const existingPromise = inFlightGeoLookups.get(cacheKey);
+  if (existingPromise) return existingPromise;
+
+  const lookupPromise = (async (): Promise<[number, number]> => {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const query = cleanState ? `${city}, ${state}, Brazil` : `${city}, Brazil`;
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+        { headers: { 'Accept-Language': 'pt-BR' }, signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          if (Number.isFinite(lat) && Number.isFinite(lon)) {
+            persistGeoCacheEntry(cacheKey, [lat, lon]);
+            return [lat, lon];
+          }
+        }
+      }
+    } catch {
+      // Fallback gracefully on timeout or rate limit
     }
-  } catch (err) {
-    console.warn('Geocoding fetch failed for:', city, state, err);
-  }
 
-  if (cityCoordsCache[cleanCity]) {
-    return cityCoordsCache[cleanCity];
-  }
+    if (cityCoordsCache[normCity]) return cityCoordsCache[normCity];
+    if (cityCoordsCache[cleanCity]) return cityCoordsCache[cleanCity];
+    if (stateCenters[cleanState]) return stateCenters[cleanState];
+    return [-10.184, -48.3336];
+  })();
 
-  if (stateCenters[cleanState]) {
-    return stateCenters[cleanState];
+  inFlightGeoLookups.set(cacheKey, lookupPromise);
+  try {
+    return await lookupPromise;
+  } finally {
+    inFlightGeoLookups.delete(cacheKey);
   }
-
-  return [-10.184, -48.3336];
 }
 
 function createPinIcon(color: string, ringColor: string, label: string) {
@@ -131,11 +204,45 @@ function createPinIcon(color: string, ringColor: string, label: string) {
   });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatDateBrShort(iso?: string): string {
+  if (!iso) return '-';
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+const LOGISTICS_STATUS_LABEL: Record<string, string> = {
+  programado: 'Programado',
+  em_andamento: 'Em Andamento',
+  concluido: 'Concluído',
+  cancelado: 'Cancelado',
+};
+
 export interface LeafletRouteMapProps {
   works: ConstructionWork[];
   trips?: Trip[];
   logisticsSchedules?: LogisticsSchedule[];
   heightClass?: string;
+  autoFocusLogistics?: boolean;
+  autoFocusIntervalMs?: number;
+  initialOverviewDelayMs?: number;
+}
+
+interface PlottedLogisticsTarget {
+  schedule: LogisticsSchedule;
+  origCoord: [number, number];
+  destCoord: [number, number];
+  marker: L.Marker;
+  polyline: L.Polyline;
 }
 
 export function LeafletRouteMap({
@@ -143,10 +250,43 @@ export function LeafletRouteMap({
   trips = [],
   logisticsSchedules = [],
   heightClass = 'h-[380px]',
+  autoFocusLogistics = false,
+  autoFocusIntervalMs = 10000,
+  initialOverviewDelayMs = 10000,
 }: LeafletRouteMapProps) {
   const mapRef = React.useRef<HTMLDivElement>(null);
   const mapInstanceRef = React.useRef<L.Map | null>(null);
   const layerGroupRef = React.useRef<L.LayerGroup | null>(null);
+  const logisticsTargetsRef = React.useRef<PlottedLogisticsTarget[]>([]);
+  const [focusedInfo, setFocusedInfo] = React.useState<{
+    index: number;
+    total: number;
+    schedule: LogisticsSchedule;
+  } | null>(null);
+  const [overviewState, setOverviewState] = React.useState<{
+    secondsLeft: number;
+    totalLogistics: number;
+  } | null>(null);
+
+  const latestDataRef = React.useRef({ works, trips, logisticsSchedules });
+  latestDataRef.current = { works, trips, logisticsSchedules };
+
+  const mapDataSignature = React.useMemo(() => {
+    const wSig = works.map(w => `${w.id}:${w.name}:${w.city}:${w.state}:${w.status}`).join('|');
+    const tSig = trips
+      .map(
+        t =>
+          `${t.id}:${t.originCity || t.checkIn.originCity || ''}:${t.destinationCity || t.checkIn.destinationCity || ''}:${t.checkIn.destination}`
+      )
+      .join('|');
+    const lSig = logisticsSchedules
+      .map(
+        s =>
+          `${s.id}:${s.scheduleStatus}:${s.originWorkId || ''}:${s.originCity || ''}:${s.originState || ''}:${s.workId || ''}:${s.destinationCity || ''}:${s.destinationState || ''}:${s.destinationLabel}:${s.vehicleModelPlate}:${s.complementVehicleModelPlate || ''}:${s.startDate}:${s.endDate}:${s.driverName || ''}:${s.cargoDescription || ''}`
+      )
+      .join('|');
+    return `${wSig}##${tSig}##${lSig}`;
+  }, [works, trips, logisticsSchedules]);
 
   // 1. Initialize Leaflet map & ResizeObserver once on mount, clean up on unmount
   React.useEffect(() => {
@@ -192,17 +332,22 @@ export function LeafletRouteMap({
       if (observer) {
         observer.disconnect();
       }
+      logisticsTargetsRef.current = [];
       layerGroupRef.current = null;
       if (mapInstanceRef.current === map) {
         mapInstanceRef.current = null;
       }
       try {
+        map.stop();
         map.remove();
       } catch {
         // Ignore removal errors if DOM already detached
       }
     };
   }, []);
+
+  const focusFnRef = React.useRef<((idx: number) => void) | null>(null);
+  const currentFocusIndexRef = React.useRef<number>(0);
 
   // 2. Render markers and routes safely into layerGroup
   React.useEffect(() => {
@@ -212,6 +357,9 @@ export function LeafletRouteMap({
 
     let isMounted = true;
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    let overviewTickInterval: ReturnType<typeof setInterval> | null = null;
+    let focusStartTimeout: ReturnType<typeof setTimeout> | null = null;
+    let focusInterval: ReturnType<typeof setInterval> | null = null;
 
     const isMapAlive = () =>
       isMounted &&
@@ -227,35 +375,195 @@ export function LeafletRouteMap({
       Number.isFinite(coord[1]);
 
     layerGroup.clearLayers();
+    logisticsTargetsRef.current = [];
+    focusFnRef.current = null;
+    setFocusedInfo(null);
+    setOverviewState(null);
 
     const hqCoord: [number, number] = [-10.184, -48.3336];
     const hqIcon = createPinIcon('#0f172a', '#38bdf8', 'HQ');
     const workIcon = createPinIcon('#2563eb', '#bfdbfe', 'OB');
     const tripIcon = createPinIcon('#059669', '#a7f3d0', 'VG');
     const logisticsIcon = createPinIcon('#7c3aed', '#ddd6fe', 'LG');
+    const activeLogisticsIcon = createPinIcon('#f59e0b', '#fef3c7', 'LG');
+
+    const focusLogisticsTarget = (targets: PlottedLogisticsTarget[], idx: number) => {
+      if (!isMapAlive() || targets.length === 0) return;
+      const safeIdx = ((idx % targets.length) + targets.length) % targets.length;
+      const target = targets[safeIdx];
+      currentFocusIndexRef.current = safeIdx;
+
+      targets.forEach((entry, i) => {
+        try {
+          if (i === safeIdx) {
+            entry.marker.setIcon(activeLogisticsIcon);
+            entry.marker.setZIndexOffset(1000);
+            entry.polyline.setStyle({
+              color: '#f59e0b',
+              weight: 5,
+              opacity: 0.95,
+              dashArray: undefined,
+            });
+            entry.polyline.bringToFront();
+          } else {
+            entry.marker.setIcon(logisticsIcon);
+            entry.marker.setZIndexOffset(0);
+            entry.polyline.setStyle({
+              color: '#8b5cf6',
+              weight: 3,
+              opacity: 0.75,
+              dashArray: '8, 6',
+            });
+          }
+        } catch {
+          // Ignore layer style error on teardown
+        }
+      });
+
+      setFocusedInfo({
+        index: safeIdx,
+        total: targets.length,
+        schedule: target.schedule,
+      });
+
+      try {
+        const targetZoom = Math.max(map.getZoom(), 8);
+        map.flyTo(target.destCoord, targetZoom, {
+          animate: true,
+          duration: 0.75,
+        });
+        target.marker.openPopup();
+      } catch {
+        // Ignore pan/popup error if map collapsed
+      }
+    };
 
     async function loadMarkers() {
       if (!isMapAlive()) return;
+
+      const {
+        works: curWorks,
+        trips: curTrips,
+        logisticsSchedules: curLogisticsSchedules,
+      } = latestDataRef.current;
+
+      const workById = new Map<string, ConstructionWork>();
+      curWorks.forEach(w => workById.set(w.id, w));
+
+      const activeLogistics = curLogisticsSchedules
+        .filter(s => s.scheduleStatus !== 'cancelado')
+        .sort((a, b) => {
+          const priority = (st: string) => (st === 'em_andamento' ? 0 : st === 'programado' ? 1 : 2);
+          return priority(a.scheduleStatus) - priority(b.scheduleStatus) || a.startDate.localeCompare(b.startDate);
+        });
+
+      // Collect all unique city/state pairs so we resolve them in parallel instead of slow sequential fetches
+      const uniqueCities = new Map<string, { city: string; state: string }>();
+      const registerCity = (city?: string, state?: string) => {
+        const c = (city || '').trim();
+        const s = (state || '').trim();
+        if (!c) return;
+        const k = `${normalizeGeoText(c)}|${normalizeGeoText(s)}`;
+        if (!uniqueCities.has(k)) {
+          uniqueCities.set(k, { city: c, state: s });
+        }
+      };
+
+      curWorks.forEach(w => registerCity(w.city, w.state));
+      curTrips.forEach(t => {
+        registerCity(t.originCity || t.checkIn.originCity || 'Palmas', t.originState || t.checkIn.originState || 'TO');
+        registerCity(t.destinationCity || t.checkIn.destinationCity, t.destinationState || t.checkIn.destinationState);
+      });
+      activeLogistics.forEach(sched => {
+        const origWork = sched.originWorkId ? workById.get(sched.originWorkId) : undefined;
+        const destWork = sched.workId ? workById.get(sched.workId) : undefined;
+        registerCity(sched.originCity || origWork?.city || 'Palmas', sched.originState || origWork?.state || 'TO');
+        registerCity(
+          sched.destinationCity || destWork?.city || 'Palmas',
+          sched.destinationState || destWork?.state || 'TO'
+        );
+      });
+
+      const preCachedAreaCoords: [number, number][] = [];
+      const tryGetCachedCoord = (city?: string, state?: string): [number, number] | undefined => {
+        const cleanCity = (city || '').trim().toLowerCase();
+        const normCity = normalizeGeoText(city || '');
+        const cleanState = normalizeGeoText(state || '');
+        const cacheKey = cleanState ? `${normCity}|${cleanState}` : normCity;
+        const rawKey = cleanState ? `${cleanCity}|${cleanState}` : cleanCity;
+        return (
+          cityCoordsCache[cacheKey] ||
+          cityCoordsCache[rawKey] ||
+          (!cleanState ? cityCoordsCache[normCity] || cityCoordsCache[cleanCity] : undefined)
+        );
+      };
+
+      curWorks.forEach(w => {
+        const cached = tryGetCachedCoord(w.city, w.state);
+        if (cached && isValidCoord(cached)) preCachedAreaCoords.push(cached);
+      });
+      activeLogistics.forEach(sched => {
+        const origWork = sched.originWorkId ? workById.get(sched.originWorkId) : undefined;
+        const destWork = sched.workId ? workById.get(sched.workId) : undefined;
+        const origCached = tryGetCachedCoord(sched.originCity || origWork?.city, sched.originState || origWork?.state);
+        const destCached = tryGetCachedCoord(
+          sched.destinationCity || destWork?.city,
+          sched.destinationState || destWork?.state
+        );
+        if (origCached && isValidCoord(origCached)) preCachedAreaCoords.push(origCached);
+        if (destCached && isValidCoord(destCached)) preCachedAreaCoords.push(destCached);
+      });
+
+      if (preCachedAreaCoords.length > 0 && isMapAlive()) {
+        try {
+          map.invalidateSize();
+          const preBounds = L.latLngBounds(preCachedAreaCoords);
+          if (preBounds.getSouthWest().equals(preBounds.getNorthEast())) {
+            map.setView(preBounds.getCenter(), 10, { animate: false });
+          } else {
+            map.fitBounds(preBounds, { padding: [24, 24], maxZoom: 11, animate: false });
+          }
+        } catch {
+          // Ignore pre-fit errors
+        }
+      }
+
+      const resolvedMap = new Map<string, [number, number]>();
+      await Promise.all(
+        Array.from(uniqueCities.entries()).map(async ([k, { city, state }]) => {
+          const coord = await resolveCityCoordinates(city, state);
+          resolvedMap.set(k, coord);
+        })
+      );
+
+      if (!isMapAlive()) return;
+
+      const getCoord = (city?: string, state?: string): [number, number] => {
+        const c = (city || '').trim();
+        const s = (state || '').trim();
+        const k = `${normalizeGeoText(c)}|${normalizeGeoText(s)}`;
+        return resolvedMap.get(k) || stateCenters[normalizeGeoText(s)] || [-10.184, -48.3336];
+      };
 
       L.marker(hqCoord, { icon: hqIcon })
         .addTo(layerGroup)
         .bindPopup('<b>Escritório Central / Matriz - Palmas/TO</b>');
 
-      const latLngs: [number, number][] = [hqCoord];
+      const worksAndLogisticsCoords: [number, number][] = [];
+      const fallbackCoords: [number, number][] = [hqCoord];
 
       // 1. Plot Construction Works & connection to HQ
-      for (const work of works) {
+      for (const work of curWorks) {
         if (!isMapAlive()) return;
-        const coord = await resolveCityCoordinates(work.city, work.state);
-        if (!isMapAlive()) return;
+        const coord = getCoord(work.city, work.state);
         if (!isValidCoord(coord)) continue;
 
-        latLngs.push(coord);
+        worksAndLogisticsCoords.push(coord);
 
         L.marker(coord, { icon: workIcon })
           .addTo(layerGroup)
           .bindPopup(
-            `<b>Obra: ${work.name}</b><br/>📍 ${work.city} - ${work.state}<br/>Status: ${
+            `<b>Obra: ${escapeHtml(work.name)}</b><br/>📍 ${escapeHtml(work.city)} - ${escapeHtml(work.state)}<br/>Status: ${
               work.status === 'active' ? 'Ativa' : 'Concluída'
             }`
           );
@@ -270,7 +578,7 @@ export function LeafletRouteMap({
 
       // 2. Plot Trip routes between Origin and Destination municipalities
       const plottedRoutes = new Set<string>();
-      for (const trip of trips) {
+      for (const trip of curTrips) {
         if (!isMapAlive()) return;
         const destCity = trip.destinationCity || trip.checkIn.destinationCity;
         const destState = trip.destinationState || trip.checkIn.destinationState || '';
@@ -278,23 +586,21 @@ export function LeafletRouteMap({
 
         const origCity = trip.originCity || trip.checkIn.originCity || 'Palmas';
         const origState = trip.originState || trip.checkIn.originState || 'TO';
-        const routeKey = `${origCity.toLowerCase()}|${origState.toLowerCase()}->${destCity.toLowerCase()}|${destState.toLowerCase()}`;
+        const routeKey = `${normalizeGeoText(origCity)}|${normalizeGeoText(origState)}->${normalizeGeoText(destCity)}|${normalizeGeoText(destState)}`;
         if (plottedRoutes.has(routeKey)) continue;
         plottedRoutes.add(routeKey);
 
-        const origCoord = await resolveCityCoordinates(origCity, origState);
-        if (!isMapAlive()) return;
-        const destCoord = await resolveCityCoordinates(destCity, destState);
-        if (!isMapAlive()) return;
+        const origCoord = getCoord(origCity, origState);
+        const destCoord = getCoord(destCity, destState);
         if (!isValidCoord(origCoord) || !isValidCoord(destCoord)) continue;
 
-        latLngs.push(origCoord, destCoord);
+        fallbackCoords.push(origCoord, destCoord);
 
         L.marker(destCoord, { icon: tripIcon })
           .addTo(layerGroup)
           .bindPopup(
-            `<b>Destino Viagem: ${trip.checkIn.destination}</b><br/>📍 ${destCity}${
-              destState ? ` - ${destState}` : ''
+            `<b>Destino Viagem: ${escapeHtml(trip.checkIn.destination)}</b><br/>📍 ${escapeHtml(destCity)}${
+              destState ? ` - ${escapeHtml(destState)}` : ''
             }`
           );
 
@@ -305,56 +611,149 @@ export function LeafletRouteMap({
         }).addTo(layerGroup);
       }
 
-      // 3. Plot active/scheduled Logistics Schedules routes
-      const plottedLogistics = new Set<string>();
-      for (const sched of logisticsSchedules) {
+      // 3. Plot ALL non-canceled Logistics Schedules routes
+      const destCityOccurrence = new Map<string, number>();
+      const targets: PlottedLogisticsTarget[] = [];
+
+      for (const sched of activeLogistics) {
         if (!isMapAlive()) return;
-        if (sched.scheduleStatus === 'cancelado') continue;
-        if (!sched.destinationCity) continue;
+        const origWork = sched.originWorkId ? workById.get(sched.originWorkId) : undefined;
+        const destWork = sched.workId ? workById.get(sched.workId) : undefined;
 
-        const origCity = sched.originCity || 'Palmas';
-        const origState = sched.originState || 'TO';
-        const lKey = `${origCity.toLowerCase()}|${origState.toLowerCase()}->${sched.destinationCity.toLowerCase()}|${(sched.destinationState || '').toLowerCase()}`;
-        if (plottedLogistics.has(lKey)) continue;
-        plottedLogistics.add(lKey);
+        const origCity = sched.originCity || origWork?.city || 'Palmas';
+        const origState = sched.originState || origWork?.state || 'TO';
+        const destCity = sched.destinationCity || destWork?.city || 'Palmas';
+        const destState = sched.destinationState || destWork?.state || 'TO';
 
-        const origCoord = await resolveCityCoordinates(origCity, origState);
-        if (!isMapAlive()) return;
-        const destCoord = await resolveCityCoordinates(sched.destinationCity, sched.destinationState);
-        if (!isMapAlive()) return;
-        if (!isValidCoord(origCoord) || !isValidCoord(destCoord)) continue;
+        const origCoord = getCoord(origCity, origState);
+        const baseDestCoord = getCoord(destCity, destState);
+        if (!isValidCoord(origCoord) || !isValidCoord(baseDestCoord)) continue;
 
-        latLngs.push(origCoord, destCoord);
+        // Slightly offset overlapping markers in the same city so every logistics item is visible and centered individually
+        const cityKey = `${normalizeGeoText(destCity)}|${normalizeGeoText(destState)}`;
+        const occ = destCityOccurrence.get(cityKey) || 0;
+        destCityOccurrence.set(cityKey, occ + 1);
 
-        L.marker(destCoord, { icon: logisticsIcon })
-          .addTo(layerGroup)
-          .bindPopup(
-            `<b>Logística: ${sched.vehicleModelPlate}${
+        const destCoord: [number, number] =
+          occ === 0
+            ? baseDestCoord
+            : [
+                baseDestCoord[0] + 0.014 * Math.sin((occ * Math.PI) / 3),
+                baseDestCoord[1] + 0.014 * Math.cos((occ * Math.PI) / 3),
+              ];
+
+        worksAndLogisticsCoords.push(origCoord, destCoord);
+
+        const originText = sched.originWorkName || sched.originLabel || `${origCity}/${origState}`;
+        const destText = sched.isThirdPartyRental
+          ? `Locado: ${sched.thirdPartyName || sched.destinationLabel}`
+          : sched.workName || sched.destinationLabel;
+        const statusText = LOGISTICS_STATUS_LABEL[sched.scheduleStatus] || sched.scheduleStatus;
+        const periodText = `${formatDateBrShort(sched.startDate)} até ${formatDateBrShort(sched.endDate)}`;
+
+        const popupHtml = `
+          <div style="min-width:230px;font-family:system-ui,sans-serif;line-height:1.4;color:#0f172a;">
+            <div style="font-weight:800;font-size:13px;color:#5b21b6;margin-bottom:4px;">
+              🚚 ${escapeHtml(sched.vehicleModelPlate)}
+            </div>
+            ${
               sched.complementVehicleModelPlate
-                ? ` + Comp.: ${sched.complementVehicleModelPlate}`
+                ? `<div style="font-size:11px;font-weight:700;color:#4338ca;margin-bottom:4px;">+ Complemento: ${escapeHtml(sched.complementVehicleModelPlate)}</div>`
                 : ''
-            }</b><br/>📍 ${sched.destinationLabel} (${sched.destinationCity}/${sched.destinationState})`
-          );
+            }
+            <div style="font-size:12px;margin-bottom:3px;">
+              <b>Origem:</b> ${escapeHtml(originText)} (${escapeHtml(origCity)}/${escapeHtml(origState)})
+            </div>
+            <div style="font-size:12px;margin-bottom:3px;">
+              <b>Destino:</b> ${escapeHtml(destText)} (${escapeHtml(destCity)}/${escapeHtml(destState)})
+            </div>
+            <div style="font-size:11px;margin-bottom:3px;">
+              <b>Período:</b> ${escapeHtml(periodText)} · <b>Status:</b> ${escapeHtml(statusText)}
+            </div>
+            ${
+              sched.driverName
+                ? `<div style="font-size:11px;margin-bottom:2px;"><b>Motorista:</b> ${escapeHtml(sched.driverName)}</div>`
+                : ''
+            }
+            ${
+              sched.cargoDescription
+                ? `<div style="font-size:11px;color:#334155;"><b>Carga:</b> ${escapeHtml(sched.cargoDescription)}</div>`
+                : ''
+            }
+          </div>
+        `;
 
-        L.polyline([origCoord, destCoord], {
+        const marker = L.marker(destCoord, { icon: logisticsIcon })
+          .addTo(layerGroup)
+          .bindPopup(popupHtml, { maxWidth: 320, autoPan: !autoFocusLogistics });
+
+        const polyline = L.polyline([origCoord, destCoord], {
           color: '#8b5cf6',
           weight: 3,
           opacity: 0.8,
           dashArray: '8, 6',
         }).addTo(layerGroup);
+
+        targets.push({
+          schedule: sched,
+          origCoord,
+          destCoord,
+          marker,
+          polyline,
+        });
       }
 
-      if (isMapAlive() && latLngs.length > 1) {
+      logisticsTargetsRef.current = targets;
+      focusFnRef.current = (nextIdx: number) => focusLogisticsTarget(targets, nextIdx);
+
+      const areaCoords = worksAndLogisticsCoords.length > 0 ? worksAndLogisticsCoords : fallbackCoords;
+      let focusStarted = false;
+
+      const applyLimitedAreaBounds = () => {
+        if (!isMapAlive() || areaCoords.length === 0) return;
         try {
-          const bounds = L.latLngBounds(latLngs);
-          map.fitBounds(bounds, { padding: [50, 50] });
+          map.setMinZoom(3);
+          map.setMaxBounds([
+            [-85, -180],
+            [85, 180],
+          ]);
+          map.invalidateSize();
+          const rawBounds = L.latLngBounds(areaCoords);
+          const latSpan = Math.abs(rawBounds.getNorth() - rawBounds.getSouth());
+          const lngSpan = Math.abs(rawBounds.getEast() - rawBounds.getWest());
+          const isSingleArea = latSpan < 0.08 && lngSpan < 0.08;
+
+          if (isSingleArea) {
+            const center = rawBounds.getCenter();
+            map.setView(center, 11, { animate: false });
+          } else {
+            map.fitBounds(rawBounds, { padding: [26, 26], maxZoom: 12, animate: false });
+          }
+
+          const fittedZoom = map.getZoom();
+          map.setMinZoom(Math.max(4, fittedZoom));
+
+          const limitBounds = isSingleArea
+            ? L.latLngBounds(
+                [rawBounds.getCenter().lat - 0.25, rawBounds.getCenter().lng - 0.25],
+                [rawBounds.getCenter().lat + 0.25, rawBounds.getCenter().lng + 0.25]
+              )
+            : rawBounds.pad(0.22);
+
+          map.options.maxBoundsViscosity = 0.9;
+          map.setMaxBounds(limitBounds);
         } catch {
-          // Ignore fitBounds error if map container collapsed
+          // Ignore fitBounds/maxBounds error if map container collapsed
         }
-      }
+      };
+
+      applyLimitedAreaBounds();
 
       resizeTimeout = setTimeout(() => {
-        if (isMapAlive()) {
+        if (!isMapAlive()) return;
+        if (!focusStarted) {
+          applyLimitedAreaBounds();
+        } else {
           try {
             map.invalidateSize();
           } catch {
@@ -362,6 +761,52 @@ export function LeafletRouteMap({
           }
         }
       }, 250);
+
+      if (autoFocusLogistics && targets.length > 0 && isMapAlive()) {
+        const overviewDelay = Math.max(0, initialOverviewDelayMs);
+
+        if (overviewDelay >= 1000) {
+          let remainingSec = Math.ceil(overviewDelay / 1000);
+          setOverviewState({
+            secondsLeft: remainingSec,
+            totalLogistics: targets.length,
+          });
+          overviewTickInterval = setInterval(() => {
+            if (!isMapAlive()) return;
+            remainingSec -= 1;
+            if (remainingSec > 0) {
+              setOverviewState({
+                secondsLeft: remainingSec,
+                totalLogistics: targets.length,
+              });
+            } else if (overviewTickInterval) {
+              clearInterval(overviewTickInterval);
+              overviewTickInterval = null;
+            }
+          }, 1000);
+        }
+
+        focusStartTimeout = setTimeout(() => {
+          if (!isMapAlive()) return;
+          focusStarted = true;
+          if (overviewTickInterval) {
+            clearInterval(overviewTickInterval);
+            overviewTickInterval = null;
+          }
+          setOverviewState(null);
+
+          const initialIdx = ((currentFocusIndexRef.current % targets.length) + targets.length) % targets.length;
+          focusLogisticsTarget(targets, initialIdx);
+
+          if (targets.length > 1) {
+            focusInterval = setInterval(() => {
+              if (!isMapAlive()) return;
+              const nextIdx = (currentFocusIndexRef.current + 1) % targets.length;
+              focusLogisticsTarget(targets, nextIdx);
+            }, Math.max(3000, autoFocusIntervalMs));
+          }
+        }, overviewDelay);
+      }
     }
 
     map.whenReady(() => {
@@ -375,14 +820,94 @@ export function LeafletRouteMap({
       if (resizeTimeout) {
         clearTimeout(resizeTimeout);
       }
+      if (overviewTickInterval) {
+        clearInterval(overviewTickInterval);
+      }
+      if (focusStartTimeout) {
+        clearTimeout(focusStartTimeout);
+      }
+      if (focusInterval) {
+        clearInterval(focusInterval);
+      }
     };
-  }, [works, trips, logisticsSchedules]);
+  }, [mapDataSignature, autoFocusLogistics, autoFocusIntervalMs, initialOverviewDelayMs]);
 
   return (
     <div
       className={`w-full ${heightClass} rounded-2xl overflow-hidden border border-slate-700 shadow-inner relative z-10`}
     >
       <div ref={mapRef} className="w-full h-full" />
+
+      {autoFocusLogistics && overviewState && !focusedInfo && (
+        <div className="pointer-events-none absolute bottom-3 left-3 z-[400] max-w-md bg-slate-950/90 backdrop-blur-md border border-sky-400/50 rounded-xl px-3.5 py-2.5 text-white shadow-xl">
+          <div className="flex items-center justify-between gap-3 text-xs font-mono text-sky-300 font-bold">
+            <span>Área de Obras e Logísticas</span>
+            <span className="text-amber-300 tabular-nums">
+              Foco em {overviewState.secondsLeft}s
+            </span>
+          </div>
+          <div className="text-xs text-slate-300 mt-0.5 font-mono">
+            {overviewState.totalLogistics}{' '}
+            {overviewState.totalLogistics === 1 ? 'logística ativa' : 'logísticas ativas'} prontas para exibição
+          </div>
+        </div>
+      )}
+
+      {autoFocusLogistics && focusedInfo && (
+        <div className="absolute bottom-3 left-3 z-[400] max-w-md bg-slate-950/90 backdrop-blur-md border border-amber-400/50 rounded-xl px-3.5 py-2.5 text-white shadow-xl">
+          <div className="flex items-center justify-between gap-3 text-[11px] font-mono text-amber-300 font-bold mb-1">
+            <span>
+              Logística em Foco ({focusedInfo.index + 1}/{focusedInfo.total})
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-400">
+                {focusedInfo.total > 1 ? `A cada ${Math.round(autoFocusIntervalMs / 1000)}s` : 'Rota única'}
+              </span>
+              {focusedInfo.total > 1 && (
+                <div className="flex items-center gap-1 ml-1">
+                  <button
+                    type="button"
+                    onClick={() => focusFnRef.current?.(focusedInfo.index - 1)}
+                    className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer leading-none"
+                    title="Logística anterior"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => focusFnRef.current?.(focusedInfo.index + 1)}
+                    className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 cursor-pointer leading-none"
+                    title="Próxima logística"
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="text-sm font-black font-mono text-white truncate">
+            {focusedInfo.schedule.vehicleModelPlate}
+            {focusedInfo.schedule.complementVehicleModelPlate
+              ? ` + ${focusedInfo.schedule.complementVehicleModelPlate}`
+              : ''}
+          </div>
+          <div className="text-xs text-slate-200 truncate">
+            {focusedInfo.schedule.originCity || 'Palmas'}/{focusedInfo.schedule.originState || 'TO'} →{' '}
+            <strong>
+              {focusedInfo.schedule.isThirdPartyRental
+                ? focusedInfo.schedule.thirdPartyName || focusedInfo.schedule.destinationLabel
+                : focusedInfo.schedule.workName || focusedInfo.schedule.destinationLabel}
+            </strong>{' '}
+            ({focusedInfo.schedule.destinationCity}/{focusedInfo.schedule.destinationState})
+          </div>
+          <div className="text-[11px] font-mono text-slate-300 truncate mt-0.5">
+            {formatDateBrShort(focusedInfo.schedule.startDate)} até{' '}
+            {formatDateBrShort(focusedInfo.schedule.endDate)}
+            {focusedInfo.schedule.driverName ? ` · Mot.: ${focusedInfo.schedule.driverName}` : ''}
+            {focusedInfo.schedule.cargoDescription ? ` · ${focusedInfo.schedule.cargoDescription}` : ''}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
