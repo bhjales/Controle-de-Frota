@@ -113,7 +113,7 @@ export function TvDashboard({
 
   const slides = [
     { title: 'QTD de Frotas & Visão Geral', shortLabel: 'QTD Frotas' },
-    { title: 'Calendário Mensal de Logística (Mês Atual)', shortLabel: 'Calendário Logística' },
+    { title: 'Calendário de Logística — Próxima Semana (7 Dias)', shortLabel: 'Calendário Logística' },
     { title: 'Visão Unificada — Veículos Ativos e Maquinários por Obra', shortLabel: 'Veículos & Maquinários' },
     { title: 'Mapa de Rotas e Itinerários por Cidades (Obras)', shortLabel: 'Mapa de Rotas' },
     { title: 'Central de Manutenções — Oficina, Preventivas e Histórico', shortLabel: 'Manutenções' },
@@ -268,32 +268,54 @@ export function TvDashboard({
     [trips]
   );
 
-  // Current Month Calendar Math (always reflects current month from live clock)
+  // Current Month & Rolling 1-Week Calendar Math (7 days from current date)
   const currentYear = currentTime.getFullYear();
   const currentMonth = currentTime.getMonth();
+  const currentDay = currentTime.getDate();
   const todayStr = formatDateISO(currentTime);
   const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  const firstWeekday = new Date(currentYear, currentMonth, 1).getDay();
-  const totalCalendarWeeks = Math.ceil((firstWeekday + daysInCurrentMonth) / 7);
-  const trailingEmptyCells = totalCalendarWeeks * 7 - (firstWeekday + daysInCurrentMonth);
   const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
   const monthStartStr = `${monthPrefix}-01`;
   const monthEndStr = `${monthPrefix}-${String(daysInCurrentMonth).padStart(2, '0')}`;
 
-  const currentMonthDays = useMemo(() => {
-    const arr: { day: number; iso: string; weekday: number; isWeekend: boolean }[] = [];
-    for (let d = 1; d <= daysInCurrentMonth; d++) {
-      const dt = new Date(currentYear, currentMonth, d);
+  const oneWeekDays = useMemo(() => {
+    const arr: {
+      day: number;
+      month: number;
+      year: number;
+      iso: string;
+      dateLabel: string;
+      weekday: number;
+      weekdayLabel: string;
+      isWeekend: boolean;
+      isToday: boolean;
+    }[] = [];
+    for (let offset = 0; offset < 7; offset++) {
+      const dt = new Date(currentYear, currentMonth, currentDay + offset);
       const wd = dt.getDay();
+      const dd = String(dt.getDate()).padStart(2, '0');
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
       arr.push({
-        day: d,
+        day: dt.getDate(),
+        month: dt.getMonth(),
+        year: dt.getFullYear(),
         iso: formatDateISO(dt),
+        dateLabel: `${dd}/${mm}`,
         weekday: wd,
-        isWeekend: wd === 0 || wd === 6
+        weekdayLabel: WEEKDAY_NAMES[wd],
+        isWeekend: wd === 0 || wd === 6,
+        isToday: offset === 0,
       });
     }
     return arr;
-  }, [currentYear, currentMonth, daysInCurrentMonth]);
+  }, [currentYear, currentMonth, currentDay]);
+
+  const oneWeekStartStr = oneWeekDays[0]?.iso || todayStr;
+  const oneWeekEndStr = oneWeekDays[oneWeekDays.length - 1]?.iso || todayStr;
+  const oneWeekRangeLabel =
+    oneWeekDays.length === 7
+      ? `${oneWeekDays[0].dateLabel} a ${oneWeekDays[6].dateLabel}/${oneWeekDays[6].year}`
+      : `${MONTH_NAMES[currentMonth]} de ${currentYear}`;
 
   const monthLogisticsSchedules = useMemo(() => {
     return logisticsSchedules
@@ -303,13 +325,71 @@ export function TvDashboard({
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
   }, [logisticsSchedules, monthStartStr, monthEndStr]);
 
+  const oneWeekLogisticsSchedules = useMemo(() => {
+    return logisticsSchedules
+      .filter(
+        s => s.scheduleStatus !== 'cancelado' && s.startDate <= oneWeekEndStr && s.endDate >= oneWeekStartStr
+      )
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }, [logisticsSchedules, oneWeekStartStr, oneWeekEndStr]);
+
   const scheduleColorMap = useMemo(() => {
     const map = new Map<string, { chip: string; dot: string }>();
-    monthLogisticsSchedules.forEach((sched, idx) => {
+    oneWeekLogisticsSchedules.forEach((sched, idx) => {
       map.set(sched.id, SCHEDULE_COLOR_PALETTE[idx % SCHEDULE_COLOR_PALETTE.length]);
     });
     return map;
-  }, [monthLogisticsSchedules]);
+  }, [oneWeekLogisticsSchedules]);
+
+  const oneWeekScheduleLanes = useMemo(() => {
+    if (oneWeekDays.length !== 7) return [];
+    type WeekScheduleSegment = {
+      item: LogisticsSchedule;
+      startIdx: number;
+      endIdx: number;
+      span: number;
+      continuesBefore: boolean;
+      continuesAfter: boolean;
+    };
+
+    const segments: WeekScheduleSegment[] = [];
+    oneWeekLogisticsSchedules.forEach(item => {
+      let startIdx = -1;
+      let endIdx = -1;
+      for (let i = 0; i < 7; i++) {
+        const iso = oneWeekDays[i].iso;
+        if (item.startDate <= iso && item.endDate >= iso) {
+          if (startIdx === -1) startIdx = i;
+          endIdx = i;
+        }
+      }
+      if (startIdx !== -1 && endIdx !== -1) {
+        segments.push({
+          item,
+          startIdx,
+          endIdx,
+          span: endIdx - startIdx + 1,
+          continuesBefore: item.startDate < oneWeekStartStr,
+          continuesAfter: item.endDate > oneWeekEndStr,
+        });
+      }
+    });
+
+    segments.sort((a, b) => a.startIdx - b.startIdx || b.span - a.span);
+
+    const lanes: { lastEndIdx: number; segments: WeekScheduleSegment[] }[] = [];
+    segments.forEach(seg => {
+      const targetLane = lanes.find(lane => lane.lastEndIdx < seg.startIdx);
+      if (targetLane) {
+        targetLane.segments.push(seg);
+        targetLane.lastEndIdx = seg.endIdx;
+      } else {
+        lanes.push({ lastEndIdx: seg.endIdx, segments: [seg] });
+      }
+    });
+
+    return lanes.map(l => l.segments);
+  }, [oneWeekDays, oneWeekLogisticsSchedules, oneWeekStartStr, oneWeekEndStr]);
 
   return (
     <div
@@ -638,9 +718,9 @@ export function TvDashboard({
           </div>
         )}
 
-        {/* SLIDE 1: CALENDÁRIO MENSAL DE LOGÍSTICA (MÊS ATUAL) */}
+        {/* SLIDE 1: CALENDÁRIO DE LOGÍSTICA (PRÓXIMA SEMANA - 7 DIAS) */}
         {currentSlide === 1 && (
-          <div className="flex-1 min-h-0 bg-[#0F172A] border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col gap-2 overflow-hidden animate-fade-in">
+          <div className="flex-1 min-h-0 bg-[#0F172A] border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col gap-2.5 overflow-hidden animate-fade-in">
             <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20 shrink-0">
@@ -648,43 +728,43 @@ export function TvDashboard({
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-base sm:text-xl font-black text-white font-display truncate">
-                    Calendário Mensal de Logística — {MONTH_NAMES[currentMonth]} de {currentYear}
+                    Calendário de Logística (Semana Atual) — {oneWeekRangeLabel}
                   </h3>
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 text-xs sm:text-sm font-mono tabular-nums shrink-0">
                 <span className="text-blue-300 font-bold">
-                  {monthLogisticsSchedules.length} Programações
+                  {oneWeekLogisticsSchedules.length} Programações
                 </span>
                 <span aria-hidden="true" className="text-slate-600">
                   ·
                 </span>
                 <span className="text-emerald-300 font-bold">
-                  {monthLogisticsSchedules.filter(s => s.scheduleStatus === 'em_andamento').length} Em Andamento
+                  {oneWeekLogisticsSchedules.filter(s => s.scheduleStatus === 'em_andamento').length} Em Andamento
                 </span>
                 <span aria-hidden="true" className="text-slate-600">
                   ·
                 </span>
                 <span className="text-purple-300 font-bold">
-                  {monthLogisticsSchedules.filter(s => s.isThirdPartyRental).length} Terceiros
+                  {oneWeekLogisticsSchedules.filter(s => s.isThirdPartyRental).length} Terceiros
                 </span>
                 <button
                   type="button"
                   onClick={() =>
                     exportLogisticsCSV({
-                      schedules: monthLogisticsSchedules,
+                      schedules: oneWeekLogisticsSchedules,
                       works,
                       vehicles,
-                      monthYearLabel: `${MONTH_NAMES[currentMonth]} de ${currentYear}`,
-                      monthStartStr,
-                      monthEndStr,
-                      scopeDescription: `Painel TV - Agenda de ${MONTH_NAMES[currentMonth]} de ${currentYear}`,
+                      monthYearLabel: oneWeekRangeLabel,
+                      monthStartStr: oneWeekStartStr,
+                      monthEndStr: oneWeekEndStr,
+                      scopeDescription: `Painel TV - Agenda Semanal (${oneWeekRangeLabel})`,
                     })
                   }
-                  disabled={monthLogisticsSchedules.length === 0}
+                  disabled={oneWeekLogisticsSchedules.length === 0}
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/35 disabled:opacity-40 text-emerald-300 border border-emerald-500/40 font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                  title="Exportar Calendário do Mês em CSV (Excel)"
+                  title="Exportar Calendário da Semana em CSV (Excel)"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
                   CSV
@@ -693,17 +773,17 @@ export function TvDashboard({
                   type="button"
                   onClick={() =>
                     exportLogisticsPDF({
-                      schedules: monthLogisticsSchedules,
+                      schedules: oneWeekLogisticsSchedules,
                       works,
                       vehicles,
-                      monthYearLabel: `${MONTH_NAMES[currentMonth]} de ${currentYear}`,
-                      monthStartStr,
-                      monthEndStr,
-                      scopeDescription: `Painel TV - Agenda de ${MONTH_NAMES[currentMonth]} de ${currentYear}`,
+                      monthYearLabel: oneWeekRangeLabel,
+                      monthStartStr: oneWeekStartStr,
+                      monthEndStr: oneWeekEndStr,
+                      scopeDescription: `Painel TV - Agenda Semanal (${oneWeekRangeLabel})`,
                     })
                   }
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white border border-blue-400/50 font-bold transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                  title="Exportar Calendário do Mês em PDF (Offline)"
+                  title="Exportar Calendário da Semana em PDF (Offline)"
                 >
                   <FileText className="w-4 h-4" />
                   PDF
@@ -712,120 +792,179 @@ export function TvDashboard({
             </div>
 
             <div className="flex-1 min-h-0 flex flex-col border border-slate-800 rounded-xl overflow-hidden bg-slate-950/60">
+              {/* Cabeçalho dos 7 dias (Dia da semana + Data + Qtd) */}
               <div className="shrink-0 grid grid-cols-7 bg-slate-900 border-b border-slate-800">
-                {WEEKDAY_NAMES.map(wd => (
-                  <div
-                    key={wd}
-                    className="py-1.5 text-center text-xs sm:text-sm lg:text-base font-bold text-slate-200 border-r last:border-r-0 border-slate-800 font-mono"
-                  >
-                    {wd}
-                  </div>
-                ))}
-              </div>
-              <div
-                className="flex-1 min-h-0 grid grid-cols-7 overflow-hidden"
-                style={{ gridTemplateRows: `repeat(${totalCalendarWeeks}, minmax(0, 1fr))` }}
-              >
-                {Array.from({ length: firstWeekday }).map((_, idx) => (
-                  <div
-                    key={`empty-start-${idx}`}
-                    className="bg-slate-950/40 border-r border-b border-slate-800/80 min-h-0"
-                  />
-                ))}
-                {currentMonthDays.map(d => {
-                  const isToday = d.iso === todayStr;
-                  const daySchedules = monthLogisticsSchedules.filter(
+                {oneWeekDays.map(d => {
+                  const dayCount = oneWeekLogisticsSchedules.filter(
                     s => s.startDate <= d.iso && s.endDate >= d.iso
-                  );
-                  const gridLayoutClass =
-                    daySchedules.length >= 7
-                      ? 'grid grid-cols-3 gap-0.5 content-start'
-                      : daySchedules.length >= 4
-                      ? 'grid grid-cols-2 gap-0.5 content-start'
-                      : 'flex flex-col gap-0.5';
-
-                  const chipSizeClass =
-                    daySchedules.length >= 7
-                      ? 'text-[10px] sm:text-[11px] px-1 py-[1px]'
-                      : daySchedules.length >= 4
-                      ? 'text-[11px] sm:text-xs px-1.5 py-0.5'
-                      : 'text-xs sm:text-sm px-1.5 py-0.5';
-
+                  ).length;
                   return (
                     <div
                       key={d.iso}
-                      className={`p-1 border-r border-b border-slate-800/80 flex flex-col gap-0.5 min-h-0 overflow-hidden ${
-                        isToday
-                          ? 'bg-blue-950/35 ring-1 ring-inset ring-blue-500/60'
-                          : d.isWeekend
-                          ? 'bg-slate-900/40'
-                          : 'bg-slate-950/20'
+                      className={`py-2 px-2 border-r last:border-r-0 border-slate-800 flex flex-col gap-1 ${
+                        d.isToday ? 'bg-blue-950/50' : d.isWeekend ? 'bg-slate-900/80' : ''
                       }`}
                     >
-                      <div className="shrink-0 flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-1 font-mono">
                         <span
-                          className={`text-xs sm:text-sm font-mono font-black tabular-nums px-1.5 py-0 rounded ${
-                            isToday ? 'bg-blue-600 text-white' : 'text-slate-200'
+                          className={`text-xs sm:text-sm lg:text-base font-bold uppercase ${
+                            d.isToday ? 'text-blue-300' : 'text-slate-300'
                           }`}
                         >
-                          {String(d.day).padStart(2, '0')}
+                          {d.weekdayLabel}
                         </span>
-                        {daySchedules.length > 0 && (
-                          <span className="text-[11px] sm:text-xs font-mono font-bold text-slate-300">
-                            {daySchedules.length}x
+                        {dayCount > 0 && (
+                          <span className="text-xs sm:text-sm font-mono font-bold text-slate-300">
+                            {dayCount}x
                           </span>
                         )}
                       </div>
-
-                      <div className={`flex-1 min-h-0 ${gridLayoutClass}`}>
-                        {daySchedules.map(item => {
-                          const plate =
-                            item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
-                          const compPlate =
-                            item.complementVehicleModelPlate?.match(/\(([^)]+)\)/)?.[1] || item.complementVehicleId;
-                          const plateDisplay = compPlate ? `${plate}+${compPlate}` : plate;
-                          const colorStyle =
-                            scheduleColorMap.get(item.id) || SCHEDULE_COLOR_PALETTE[0];
-                          const destText = item.isThirdPartyRental
-                            ? item.thirdPartyName || item.destinationCity
-                            : item.workName || item.destinationCity;
-                          return (
-                            <div
-                              key={item.id}
-                              className={`rounded border leading-[1.2] flex items-center gap-1 min-w-0 ${chipSizeClass} ${colorStyle.chip}`}
-                              title={`${plate}${compPlate ? ` + ${compPlate} (Complemento)` : ''} | ${item.destinationLabel} (${item.destinationCity}/${item.destinationState})${
-                                item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''
-                              }`}
-                            >
-                              <span
-                                className={`w-2 h-2 rounded-full shrink-0 ${colorStyle.dot}`}
-                              />
-                              <span className="truncate">
-                                <span className="font-mono font-bold">{plateDisplay}</span>
-                                {daySchedules.length < 7 && destText ? ` · ${destText}` : ''}
-                              </span>
-                            </div>
-                          );
-                        })}
+                      <div>
+                        <span
+                          className={`inline-block text-sm sm:text-base lg:text-lg font-mono font-black tabular-nums px-2 py-0.5 rounded ${
+                            d.isToday ? 'bg-blue-600 text-white' : 'text-white'
+                          }`}
+                        >
+                          {d.isToday ? `HOJE · ${d.dateLabel}` : d.dateLabel}
+                        </span>
                       </div>
                     </div>
                   );
                 })}
-                {Array.from({ length: trailingEmptyCells }).map((_, idx) => (
-                  <div
-                    key={`empty-end-${idx}`}
-                    className="bg-slate-950/40 border-r border-b border-slate-800/80 min-h-0"
-                  />
-                ))}
+              </div>
+
+              {/* Corpo em linha do tempo contínua alinhada entre os 7 dias */}
+              <div className="relative flex-1 min-h-0 overflow-hidden">
+                {/* Colunas verticais de fundo alinhadas com o cabeçalho */}
+                <div className="absolute inset-0 grid grid-cols-7 pointer-events-none">
+                  {oneWeekDays.map(d => (
+                    <div
+                      key={d.iso}
+                      className={`border-r last:border-r-0 border-slate-800/80 h-full ${
+                        d.isToday
+                          ? 'bg-blue-950/30 ring-1 ring-inset ring-blue-500/40'
+                          : d.isWeekend
+                          ? 'bg-slate-900/35'
+                          : 'bg-slate-950/15'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                {/* Faixas contínuas das viagens */}
+                <div className="relative z-10 h-full py-2 flex flex-col gap-1.5 overflow-hidden">
+                  {oneWeekScheduleLanes.length === 0 ? (
+                    <div className="flex-1 flex items-center justify-center text-sm sm:text-base text-slate-500 font-mono">
+                      Nenhuma programação ativa para os próximos 7 dias.
+                    </div>
+                  ) : (
+                    oneWeekScheduleLanes.map((laneSegments, laneIdx) => {
+                      const isDense = oneWeekScheduleLanes.length >= 9;
+                      const isCompact = oneWeekScheduleLanes.length >= 6;
+                      return (
+                        <div
+                          key={`lane-${laneIdx}`}
+                          className={`grid grid-cols-7 items-stretch min-h-0 flex-1 ${
+                            isDense ? 'max-h-[44px]' : isCompact ? 'max-h-[62px]' : 'max-h-[84px]'
+                          }`}
+                        >
+                          {laneSegments.map(seg => {
+                            const { item, startIdx, span, continuesBefore, continuesAfter } = seg;
+                            const plate =
+                              item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
+                            const compPlate =
+                              item.complementVehicleModelPlate?.match(/\(([^)]+)\)/)?.[1] ||
+                              item.complementVehicleId;
+                            const plateDisplay = compPlate ? `${plate}+${compPlate}` : plate;
+                            const colorStyle =
+                              scheduleColorMap.get(item.id) || SCHEDULE_COLOR_PALETTE[0];
+                            const destText = item.isThirdPartyRental
+                              ? item.thirdPartyName || item.destinationLabel || item.destinationCity
+                              : item.workName || item.destinationLabel || item.destinationCity;
+                            const detailText =
+                              item.driverName || item.cargoDescription || item.destinationCity;
+                            const periodBadge = `${item.startDate.slice(8, 10)}/${item.startDate.slice(5, 7)}→${item.endDate.slice(8, 10)}/${item.endDate.slice(5, 7)}`;
+
+                            return (
+                              <div
+                                key={item.id}
+                                style={{ gridColumn: `${startIdx + 1} / span ${span}` }}
+                                className={`border flex flex-col justify-center min-w-0 overflow-hidden shadow-sm ${
+                                  continuesBefore ? 'ml-0 rounded-l-none border-l-4' : 'ml-1.5 rounded-l-lg'
+                                } ${
+                                  continuesAfter ? 'mr-0 rounded-r-none border-r-4' : 'mr-1.5 rounded-r-lg'
+                                } ${isDense ? 'px-2 py-0.5' : 'px-3 py-1.5'} ${colorStyle.chip}`}
+                                title={`${plate}${compPlate ? ` + ${compPlate} (Complemento)` : ''} | ${item.destinationLabel} (${item.destinationCity}/${item.destinationState}) | ${periodBadge}${
+                                  item.cargoDescription ? ` | Carga: ${item.cargoDescription}` : ''
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    {continuesBefore && (
+                                      <span className="text-[11px] font-mono font-black opacity-80 shrink-0">
+                                        ◀
+                                      </span>
+                                    )}
+                                    <span
+                                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorStyle.dot}`}
+                                    />
+                                    <span
+                                      className={`font-mono font-black text-white truncate ${
+                                        isDense ? 'text-xs sm:text-sm' : 'text-sm sm:text-base lg:text-lg'
+                                      }`}
+                                    >
+                                      {plateDisplay}
+                                    </span>
+                                    {destText && (
+                                      <span
+                                        className={`font-bold truncate ${
+                                          isDense ? 'text-xs' : 'text-xs sm:text-sm lg:text-base'
+                                        }`}
+                                      >
+                                        · {destText}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {span >= 2 && (
+                                      <span className="hidden sm:inline text-[11px] font-mono font-bold opacity-85 tabular-nums">
+                                        {periodBadge}
+                                      </span>
+                                    )}
+                                    {continuesAfter && (
+                                      <span className="text-[11px] font-mono font-black opacity-80">
+                                        ▶
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {!isDense && detailText && detailText !== destText && (
+                                  <div className="text-xs sm:text-sm opacity-90 truncate leading-tight pl-4">
+                                    {detailText}
+                                    {item.cargoDescription && item.driverName
+                                      ? ` · ${item.cargoDescription}`
+                                      : ''}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Legenda individual de todas as programações do mês por cor */}
+            {/* Legenda individual de todas as programações da semana por cor */}
             <div className="shrink-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm text-slate-300 font-mono">
-              {monthLogisticsSchedules.length === 0 ? (
-                <span className="text-slate-500">Nenhuma programação ativa neste mês.</span>
+              {oneWeekLogisticsSchedules.length === 0 ? (
+                <span className="text-slate-500">Nenhuma programação ativa para os próximos 7 dias.</span>
               ) : (
-                monthLogisticsSchedules.map(item => {
+                oneWeekLogisticsSchedules.map(item => {
                   const plate =
                     item.vehicleModelPlate.match(/\(([^)]+)\)/)?.[1] || item.vehicleId;
                   const compPlate =
@@ -850,7 +989,7 @@ export function TvDashboard({
                   );
                 })
               )}
-              {monthLogisticsSchedules.some(s => Boolean(s.cargoDescription)) && (
+              {oneWeekLogisticsSchedules.some(s => Boolean(s.cargoDescription)) && (
                 <span className="flex items-center gap-1.5 ml-auto text-slate-400 shrink-0">
                   <Package className="w-3.5 h-3.5" />
                   Cores individuais por programação
